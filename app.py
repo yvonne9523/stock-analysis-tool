@@ -414,7 +414,6 @@ if search_query:
                 with col_sig:
                     st.markdown("#### 🚦 確定能否入手 (AI 核心診斷)")
                     
-                    # 核心進場條件邏輯判定
                     c_ma = curr_price > latest["MA20"]
                     c_macd = latest["MACD_OSC"] > 0
                     c_kd = (latest["K"] > latest["D"]) and (latest["K"] < 75)
@@ -444,7 +443,6 @@ if search_query:
                         d_title = "🟡 【建議觀望】等待方向明朗"
                         d_desc = f"處於 ${sup1:.1f} ~ ${res1:.1f} 區間盤整，等待帶量突破壓力位後再順勢進場。"
                         
-                    # 呈現大標籤
                     st.markdown(f"""
                     <div class="{d_class}">
                         <div style="font-size: 1.05rem; font-weight: 700; color: #ffffff; margin-bottom: 6px;">{d_title}</div>
@@ -482,12 +480,13 @@ if search_query:
                         horizontal=True
                     )
                     
+                    # 移除 subplot_titles 的主圖標題文字，避免擋住頂部均線圖例
                     fig = make_subplots(
                         rows=2, cols=1,
                         shared_xaxes=True,
-                        vertical_spacing=0.08,
-                        row_heights=[0.7, 0.3],
-                        subplot_titles=('價格走勢與關鍵支撐壓力線 (標註已放大)', f'副圖指標：{sub_indicator}')
+                        vertical_spacing=0.06,
+                        row_heights=[0.72, 0.28],
+                        subplot_titles=('', f'副圖指標：{sub_indicator}')
                     )
                     
                     # 主圖 K 線
@@ -550,7 +549,7 @@ if search_query:
                         font=dict(color='#8b949e'),
                         height=560,
                         xaxis_rangeslider_visible=False,
-                        margin=dict(l=10, r=10, t=30, b=10),
+                        margin=dict(l=10, r=10, t=10, b=10),
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                     )
                     fig.update_xaxes(gridcolor='#21262d', zeroline=False)
