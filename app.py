@@ -377,7 +377,7 @@ if market_indices:
 st.markdown("<hr style='border-color: #21262d; margin-top: 5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 側邊欄：全球股市小工具
+# 側邊欄：全球股市小工具與個人持股輸入
 # -----------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("### 🌐 全球股市小工具")
@@ -402,6 +402,17 @@ with st.sidebar:
         options=["3mo", "6mo", "1y", "2y"],
         index=1,
         format_func=lambda x: {"3mo": "近 3 個月", "6mo": "近 6 個月", "1y": "近 1 年", "2y": "近 2 年"}.get(x, x)
+    )
+    
+    st.markdown("---")
+    st.markdown("### 💼 我的持股診斷 (選填)")
+    my_cost_input = st.number_input(
+        "輸入您的買入成本 / 均價",
+        min_value=0.0,
+        value=0.0,
+        step=0.5,
+        format="%.2f",
+        help="輸入您目前手上的持股成本，AI 將為您即時計算損益並提供賣出/加碼建議！"
     )
     
     st.markdown("---")
@@ -463,7 +474,6 @@ if search_query:
             if latest["K"] > latest["D"]: score += 1
             if 40 <= latest["RSI"] <= 65: score += 1
             
-            # 簡潔主標籤 + 次級描述，徹底防止文字過長被截斷
             if score >= 3:
                 diag_main = "強烈偏多"
                 diag_sub = "多方動能掌控"
@@ -485,7 +495,50 @@ if search_query:
             """, unsafe_allow_html=True)
             
             # -------------------------------------------------------------
-            # 【完美適配 5 欄卡片】排版自適應優化
+            # 【全新功能】個人持股即時診斷面板 (若使用者有輸入成本價)
+            # -------------------------------------------------------------
+            if my_cost_input > 0:
+                cost_diff = curr_price - my_cost_input
+                cost_pct = (cost_diff / my_cost_input) * 100
+                cost_color = "#f85149" if cost_diff >= 0 else "#3fb950"
+                cost_sign = "+" if cost_diff >= 0 else ""
+                
+                # 專屬持股行動建議邏輯
+                if cost_pct >= 20.0:
+                    holding_advice = f"🎉 <b>大幅獲利中 ({cost_sign}{cost_pct:.1f}%)</b>：建議將停利點移動至 20MA 月線 (<b>${ma20:.1f}</b>)，跌破前抱牢享受波段漲幅，或先收回部分本金入袋為安。"
+                    box_border = "#f85149"
+                elif cost_pct >= 8.0:
+                    holding_advice = f"📈 <b>穩定獲利中 ({cost_sign}{cost_pct:.1f}%)</b>：目前多方格局良好，可沿 5 日均線 (<b>${ma5:.1f}</b>) 續抱；若短線突破 <b>${short_target}</b> 可分批獲利了結 1/3。"
+                    box_border = "#38bdf8"
+                elif cost_pct >= -3.0:
+                    if curr_price > ma20:
+                        holding_advice = f"⚖️ <b>成本附近保本 ({cost_sign}{cost_pct:.1f}%)</b>：股價站穩月線，若回測 <b>${short_buy_low} ~ ${short_buy_high}</b> 支撐有守，可考慮小幅加碼攤低均價或順勢續抱。"
+                    else:
+                        holding_advice = f"⚖️ <b>成本附近盤整 ({cost_sign}{cost_pct:.1f}%)</b>：目前股價在月線附近拉鋸，建議先不加碼，嚴格設定以 <b>${short_stop}</b> 為防守點。"
+                    box_border = "#e3b341"
+                elif cost_pct >= -8.0:
+                    holding_advice = f"⚠️ <b>輕度套牢回檔 ({cost_sign}{cost_pct:.1f}%)</b>：已接近關鍵防守位，若跌破停損線 (<b>${short_stop}</b>) 建議果斷減碼 1/2，保留資金等待落底訊號再重新進場。"
+                    box_border = "#e3b341"
+                else:
+                    holding_advice = f"🚨 <b>套牢回檔較深 ({cost_sign}{cost_pct:.1f}%)</b>：已跌破正常技術回檔區間，切勿盲目加碼攤平！建議以季線 (<b>${ma60:.1f}</b>) 為最後防線，反彈至月線 (<b>${ma20:.1f}</b>) 時減碼減輕壓力。"
+                    box_border = "#3fb950"
+
+                st.markdown(f"""
+                <div class="card-box" style="border: 2px solid {box_border}; background: rgba(22, 27, 34, 0.95); margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-bottom: 8px;">
+                        <h4 style="margin: 0; color: #58a6ff;">💼 個人持股專屬診斷報告</h4>
+                        <div style="font-size: 1.1rem; font-weight: 700; color: {cost_color};">
+                            您的成本: ${my_cost_input:,.2f} ｜ 浮動損益: {cost_sign}{cost_diff:,.2f} ({cost_sign}{cost_pct:.2f}%)
+                        </div>
+                    </div>
+                    <div style="font-size: 0.95rem; color: #f0f6fc; line-height: 1.6; padding: 6px 0;">
+                        {holding_advice}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # -------------------------------------------------------------
+            # 5 欄卡片：買進區間 + 短中長目標 + 多空綜合診斷
             # -------------------------------------------------------------
             st.markdown("### 🎯 短・中・長線量化進出場點位推薦")
             b1, b2, b3, b4, b5 = st.columns(5)
