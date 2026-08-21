@@ -8,10 +8,10 @@ import requests
 import datetime
 
 # -----------------------------------------------------------------------------
-# 頁面配置與高質感交易終端 CSS
+# 頁面配置與高質感深色 CSS
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="三竹風格 AI 股票智能量化分析終端",
+    page_title="三竹專業 AI 股票量化終端",
     page_icon="💹",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -70,7 +70,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 台美股名稱代碼自動轉換字典
+# 台美股代碼中英字典
 # -----------------------------------------------------------------------------
 COMMON_STOCK_MAP = {
     "台積電": "2330", "TSMC": "2330", "2330": "2330",
@@ -83,47 +83,19 @@ COMMON_STOCK_MAP = {
     "緯創": "3231", "3231": "3231",
     "技嘉": "2376", "2376": "2376",
     "華碩": "2357", "2357": "2357",
-    "微星": "2377", "2377": "2377",
-    "大立光": "3008", "3008": "3008",
-    "日月光": "3711", "日月光投控": "3711", "3711": "3711",
-    "南亞科": "2408", "2408": "2408",
-    "旺宏": "2337", "2337": "2337",
-    "力積電": "6770", "6770": "6770",
-    "世界先進": "5347", "5347": "5347",
-    "欣興": "3037", "3037": "3037",
-    "南電": "8046", "8046": "8046",
-    "景碩": "3189", "3189": "3189",
-    "世芯": "3661", "世芯-KY": "3661", "3661": "3661",
-    "創意": "3443", "3443": "3443",
-    "智原": "3035", "3035": "3035",
     "長榮": "2603", "2603": "2603",
     "陽明": "2609", "2609": "2609",
     "萬海": "2615", "2615": "2615",
     "長榮航": "2618", "2618": "2618",
-    "華航": "2610", "2610": "2610",
-    "中鋼": "2002", "2002": "2002",
-    "台塑": "1301", "1301": "1301",
-    "南亞": "1303", "1303": "1303",
     "富邦金": "2881", "2881": "2881",
     "國泰金": "2882", "2882": "2882",
-    "中信金": "2891", "2891": "2891",
-    "玉山金": "2884", "2884": "2884",
-    "兆豐金": "2886", "2886": "2886",
     "0050": "0050", "元大台灣50": "0050",
     "0056": "0056", "元大高股息": "0056",
     "00878": "00878", "國泰永續高股息": "00878",
-    "00919": "00919", "群益台灣精選高息": "00919",
-    "00929": "00929", "復華台灣科技優息": "00929",
-    "00940": "00940", "元大台灣價值高息": "00940",
     "輝達": "NVDA", "NVDA": "NVDA",
     "特斯拉": "TSLA", "TSLA": "TSLA",
     "蘋果": "AAPL", "AAPL": "AAPL",
-    "微軟": "MSFT", "MSFT": "MSFT",
-    "谷歌": "GOOGL", "GOOGL": "GOOGL",
-    "亞馬遜": "AMZN", "AMZN": "AMZN",
-    "臉書": "META", "META": "META",
-    "超微": "AMD", "AMD": "AMD",
-    "台積電ADR": "TSM", "TSM": "TSM"
+    "微軟": "MSFT", "MSFT": "MSFT"
 }
 
 def resolve_stock_code(query_text):
@@ -138,11 +110,10 @@ def resolve_stock_code(query_text):
     return cleaned, cleaned
 
 # -----------------------------------------------------------------------------
-# 台股真實基本面引擎 (TWSE 官方開放資料 OpenAPI + 容錯演算)
+# 資料獲取模組 (K線、證交所財報、除權息與重大事件日程)
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=600, show_spinner=False)
 def fetch_twse_live_fundamentals(stock_id):
-    """直接連線台灣證交所官方 OpenAPI 取得今日每檔股票真實 P/E、P/B 與殖利率"""
     url = "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL"
     try:
         res = requests.get(url, timeout=8)
@@ -157,7 +128,6 @@ def fetch_twse_live_fundamentals(stock_id):
                     pe_val = float(pe_str.replace(",", "")) if pe_str and pe_str != "-" else None
                     pb_val = float(pb_str.replace(",", "")) if pb_str and pb_str != "-" else None
                     yield_val = float(yield_str.replace(",", "")) if yield_str and yield_str != "-" else None
-                    
                     roe_val = (pb_val / pe_val) if (pb_val and pe_val and pe_val > 0) else None
                     
                     return {
@@ -199,28 +169,53 @@ def get_tw_stock_kline(stock_id, days=240):
         pass
     return pd.DataFrame()
 
+# 獲取重大日程 (除權息、股東會、法說會)
+@st.cache_data(ttl=600, show_spinner=False)
+def fetch_corporate_events(ticker_symbol):
+    events = []
+    try:
+        # Yahoo Finance Calendar / Events
+        t = yf.Ticker(f"{ticker_symbol}.TW" if ticker_symbol.isdigit() else ticker_symbol)
+        cal = t.calendar
+        if cal is not None and not cal.empty:
+            for col in cal.columns:
+                events.append({"項目": "法說會/財報公布", "日期": str(cal[col].values[0])[:10], "備註": "官方預計發布日程"})
+        
+        # 股利除息日程
+        divs = t.dividends
+        if divs is not None and not divs.empty:
+            last_div_date = divs.index[-1].strftime("%Y-%m-%d")
+            last_div_val = divs.iloc[-1]
+            events.append({"項目": "除息交易日", "日期": last_div_date, "備註": f"配發現金股利 ${last_div_val:.2f}"})
+    except Exception:
+        pass
+        
+    # 台股預設日程防護
+    if not events and ticker_symbol.isdigit():
+        events = [
+            {"項目": "常態除權息", "日期": "每年 6 ~ 8 月", "備註": "視董事會與除息公告訂定"},
+            {"項目": "年度股東常會", "日期": "每年 5 ~ 6 月", "備註": "通過股利分配與營運報告"},
+            {"項目": "季報與法說會", "日期": "每季中旬 (5/15, 8/14, 11/14)", "備註": "揭露最新財務報告與展望"}
+        ]
+    return events
+
 @st.cache_data(ttl=300, show_spinner=False)
 def load_market_data(ticker_str, period_str):
     raw_code, display_name = resolve_stock_code(ticker_str)
-    
     days_map = {"3mo": 120, "6mo": 200, "1y": 380, "2y": 750}
     target_days = days_map.get(period_str, 200)
     
     df = pd.DataFrame()
     fund_info = {}
     
-    # 1. 若為台股
     if raw_code.isdigit():
         df = get_tw_stock_kline(raw_code, days=target_days)
         fund_info = fetch_twse_live_fundamentals(raw_code)
-        
-        # 依股價與本益比反推 EPS (EPS = 股價 / 本益比)
         if not df.empty and fund_info.get("trailingPE"):
             curr_p = float(df.iloc[-1]["Close"])
             fund_info["trailingEps"] = round(curr_p / fund_info["trailingPE"], 2)
         fund_info["longName"] = display_name
         
-    # 2. 若為美股或需要備援
     if df.empty or fund_info.get("trailingPE") is None:
         try:
             yf_code = f"{raw_code}.TW" if raw_code.isdigit() else raw_code
@@ -238,30 +233,38 @@ def load_market_data(ticker_str, period_str):
         except Exception:
             pass
             
-    return df, fund_info, raw_code, display_name
+    events = fetch_corporate_events(raw_code)
+    return df, fund_info, raw_code, display_name, events
 
-def compute_indicators(df):
+# -----------------------------------------------------------------------------
+# 計算全套三竹指標 (均線、KD、RSI、MACD、成交量)
+# -----------------------------------------------------------------------------
+def compute_all_indicators(df):
     if df.empty or len(df) < 5:
         return df
+    
+    # 1. 均線 MA
     df["MA5"] = df["Close"].rolling(window=5).mean()
     df["MA20"] = df["Close"].rolling(window=20).mean()
     df["MA60"] = df["Close"].rolling(window=60).mean()
     
+    # 2. 布林通道
     df["BB_mid"] = df["Close"].rolling(window=20).mean()
     df["BB_std"] = df["Close"].rolling(window=20).std()
     df["BB_upper"] = df["BB_mid"] + 2 * df["BB_std"]
     df["BB_lower"] = df["BB_mid"] - 2 * df["BB_std"]
     
+    # 3. RSI (14)
     delta = df["Close"].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / (loss + 1e-9)
     df["RSI"] = 100 - (100 / (1 + rs))
     
+    # 4. KD (14, 3)
     low_min = df["Low"].rolling(window=14).min()
     high_max = df["High"].rolling(window=14).max()
     rsv = 100 * ((df["Close"] - low_min) / (high_max - low_min + 1e-9))
-    
     k_list, d_list = [], []
     k_prev, d_prev = 50.0, 50.0
     for val in rsv:
@@ -276,18 +279,25 @@ def compute_indicators(df):
             k_prev, d_prev = k_curr, d_curr
     df["K"] = k_list
     df["D"] = d_list
+    
+    # 5. MACD (DIF, MACD 9, OSC 柱狀體)
+    ema12 = df["Close"].ewm(span=12, adjust=False).mean()
+    ema26 = df["Close"].ewm(span=26, adjust=False).mean()
+    df["MACD_DIF"] = ema12 - ema26
+    df["MACD_DEM"] = df["MACD_DIF"].ewm(span=9, adjust=False).mean()
+    df["MACD_OSC"] = df["MACD_DIF"] - df["MACD_DEM"]
+    
     return df
 
 # -----------------------------------------------------------------------------
-# 側邊欄控制項
+# 側邊欄控制
 # -----------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("### 🔍 智慧股票搜尋")
+    st.markdown("### 🔍 智慧股票終端")
     search_query = st.text_input(
-        "輸入股票名稱或代碼",
+        "股票名稱 / 代碼",
         value="華邦電",
-        placeholder="例如: 華邦電、長榮、2330、NVDA",
-        help="支援直接打中文 (如: 華邦電, 台積電, 鴻海) 或 代號 (如: 2344, 2330, AAPL)"
+        placeholder="例如: 華邦電、長榮、2330、NVDA"
     ).strip()
     
     period_option = st.selectbox(
@@ -298,20 +308,27 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("🏛️ **TWSE 證交所官方直連**：即時抓取每日最新個股本益比、淨值比與殖利率！")
-    btn_refresh = st.button("🚀 開始分析 / 重新整理", use_container_width=True)
+    st.markdown("### 📊 下方副圖指標切換")
+    sub_indicator = st.radio(
+        "選擇要顯示的副圖指標：",
+        options=["MACD (指數平滑異同)", "KD (隨機指標 14,3)", "RSI (相對強弱 14)", "Volume (成交量)"],
+        index=0
+    )
+    
+    st.markdown("---")
+    btn_refresh = st.button("🚀 重新載入", use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 主畫面呈現
+# 主畫面核心計算與展示
 # -----------------------------------------------------------------------------
 if search_query:
-    with st.spinner(f"正在連線證交所與行情庫，分析「{search_query}」..."):
-        df, info, clean_code, display_name = load_market_data(search_query, period_option)
+    with st.spinner(f"正在載入「{search_query}」圖表與除權息日程..."):
+        df, info, clean_code, display_name, events = load_market_data(search_query, period_option)
         
         if df is None or df.empty or len(df) < 5:
             st.error(f"❌ 查無「{search_query}」的價格資訊。")
         else:
-            df = compute_indicators(df)
+            df = compute_all_indicators(df)
             latest = df.iloc[-1]
             prev = df.iloc[-2]
             
@@ -394,11 +411,163 @@ if search_query:
                 </div>
                 """, unsafe_allow_html=True)
 
-            # 分頁
-            tab1, tab2, tab3 = st.tabs(["🔮 未來走勢情境預測", "📊 支撐壓力 K 線與指標", "🏢 基本面與長期價值"])
+            # 分頁標籤
+            tab1, tab2, tab3, tab4 = st.tabs([
+                "📊 支撐壓力 K 線與全指標",
+                "📅 除權息 / 股東會 / 重大行事曆",
+                "🔮 未來走勢情境預測",
+                "🏢 基本面真實財務評價"
+            ])
             
-            # TAB 1: 未來情境
+            # -------------------------------------------------------------
+            # TAB 1: 增強版支撐壓力 K 線圖 + 全套多指標副圖
+            # -------------------------------------------------------------
             with tab1:
+                col_chart, col_sig = st.columns([7.2, 2.8])
+                
+                with col_sig:
+                    st.markdown("#### 🎯 即時買賣訊號判讀")
+                    signals = []
+                    
+                    # MACD 訊號
+                    if latest["MACD_OSC"] > 0 and prev["MACD_OSC"] <= 0:
+                        signals.append(("buy", "🟢 MACD 柱狀體翻紅 (多頭動能轉強)"))
+                    elif latest["MACD_OSC"] < 0 and prev["MACD_OSC"] >= 0:
+                        signals.append(("sell", "🔴 MACD 柱狀體翻綠 (多方動能衰退)"))
+                    
+                    # KD 訊號
+                    if not np.isnan(latest["K"]) and not np.isnan(latest["D"]):
+                        if prev["K"] < prev["D"] and latest["K"] > latest["D"] and latest["K"] < 35:
+                            signals.append(("buy", "🟢 KD 低檔黃金交叉 (超賣轉折買點)"))
+                        elif prev["K"] > prev["D"] and latest["K"] < latest["D"] and latest["K"] > 65:
+                            signals.append(("sell", "🔴 KD 高檔死亡交叉 (超買回檔訊號)"))
+                    
+                    # 均線多空
+                    if curr_price > latest["MA20"] and prev_price <= prev["MA20"]:
+                        signals.append(("buy", "🟢 站上 20 日月線 (短多突破)"))
+                    elif curr_price < latest["MA20"] and prev_price >= prev["MA20"]:
+                        signals.append(("sell", "🔴 跌破 20 日月線 (短線轉弱)"))
+                        
+                    if signals:
+                        for stype, stxt in signals:
+                            cls = "signal-buy" if stype == "buy" else "signal-sell"
+                            st.markdown(f'<div class="{cls}">{stxt}</div>', unsafe_allow_html=True)
+                    else:
+                        st.markdown('<div class="signal-neutral">🟡 目前均線與各指標處於常態整理，無極端買賣轉折。</div>', unsafe_allow_html=True)
+                        
+                    st.markdown("---")
+                    st.markdown("#### 📐 關鍵價位速查")
+                    st.markdown(f"""
+                    * **壓力二 (波段高)**: `${res2}`
+                    * **壓力一 (短期阻力)**: `${res1}`
+                    * **現價**: `${curr_price:.2f}`
+                    * **支撐一 (月線防守)**: `${sup1}`
+                    * **支撐二 (季線鐵板)**: `${sup2}`
+                    """)
+                    
+                with col_chart:
+                    # 繪製主副圖
+                    fig = make_subplots(
+                        rows=2, cols=1,
+                        shared_xaxes=True,
+                        vertical_spacing=0.08,
+                        row_heights=[0.7, 0.3],
+                        subplot_titles=('價格走勢與關鍵支撐壓力線 (標註已放大)', f'副圖指標：{sub_indicator}')
+                    )
+                    
+                    # 主圖 K 線
+                    fig.add_trace(go.Candlestick(
+                        x=df.index,
+                        open=df['Open'], high=df['High'],
+                        low=df['Low'], close=df['Close'],
+                        name='K線',
+                        increasing_line_color='#f85149', increasing_fillcolor='#f85149',
+                        decreasing_line_color='#3fb950', decreasing_fillcolor='#3fb950'
+                    ), row=1, col=1)
+                    
+                    # 均線
+                    fig.add_trace(go.Scatter(x=df.index, y=df['MA5'], name='5MA', line=dict(color='#d29922', width=1.2)), row=1, col=1)
+                    fig.add_trace(go.Scatter(x=df.index, y=df['MA20'], name='20MA(月線)', line=dict(color='#58a6ff', width=1.6)), row=1, col=1)
+                    fig.add_trace(go.Scatter(x=df.index, y=df['MA60'], name='60MA(季線)', line=dict(color='#bc8cff', width=1.8)), row=1, col=1)
+                    
+                    # 支撐與壓力線 (高清晰置中標籤 + 背景色塊框，不再被右側遮擋)
+                    fig.add_hline(
+                        y=res1, line_dash="dash", line_color="#f85149", line_width=2,
+                        annotation_text=f" 🚨 壓力位 ${res1} ",
+                        annotation_position="top left",
+                        annotation_font_size=13,
+                        annotation_font_color="#ffffff",
+                        annotation_bgcolor="rgba(248, 81, 73, 0.85)",
+                        row=1, col=1
+                    )
+                    fig.add_hline(
+                        y=sup1, line_dash="dash", line_color="#3fb950", line_width=2,
+                        annotation_text=f" 🛡️ 支撐位 ${sup1} ",
+                        annotation_position="bottom left",
+                        annotation_font_size=13,
+                        annotation_font_color="#ffffff",
+                        annotation_bgcolor="rgba(63, 185, 80, 0.85)",
+                        row=1, col=1
+                    )
+                    
+                    # 副圖動態切換 (MACD, KD, RSI, Volume)
+                    if "MACD" in sub_indicator:
+                        fig.add_trace(go.Scatter(x=df.index, y=df['MACD_DIF'], name='DIF快線', line=dict(color='#58a6ff', width=1.4)), row=2, col=1)
+                        fig.add_trace(go.Scatter(x=df.index, y=df['MACD_DEM'], name='MACD慢線', line=dict(color='#d29922', width=1.4)), row=2, col=1)
+                        # OSC 柱狀體 (紅漲綠跌)
+                        colors = ['#f85149' if val >= 0 else '#3fb950' for val in df['MACD_OSC']]
+                        fig.add_trace(go.Bar(x=df.index, y=df['MACD_OSC'], name='OSC柱狀體', marker_color=colors), row=2, col=1)
+                    elif "KD" in sub_indicator:
+                        fig.add_trace(go.Scatter(x=df.index, y=df['K'], name='K值 (9,3)', line=dict(color='#f85149', width=1.5)), row=2, col=1)
+                        fig.add_trace(go.Scatter(x=df.index, y=df['D'], name='D值 (9,3)', line=dict(color='#3fb950', width=1.5)), row=2, col=1)
+                        fig.add_hline(y=80, line_dash="dot", line_color="#f85149", row=2, col=1)
+                        fig.add_hline(y=20, line_dash="dot", line_color="#3fb950", row=2, col=1)
+                    elif "RSI" in sub_indicator:
+                        fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], name='RSI (14)', line=dict(color='#f778ba', width=1.5)), row=2, col=1)
+                        fig.add_hline(y=70, line_dash="dot", line_color="#f85149", row=2, col=1)
+                        fig.add_hline(y=30, line_dash="dot", line_color="#3fb950", row=2, col=1)
+                    elif "Volume" in sub_indicator:
+                        vol_colors = ['#f85149' if df['Close'].iloc[i] >= df['Open'].iloc[i] else '#3fb950' for i in range(len(df))]
+                        fig.add_trace(go.Bar(x=df.index, y=df['Volume'], name='成交量', marker_color=vol_colors), row=2, col=1)
+                        
+                    fig.update_layout(
+                        paper_bgcolor='#0e1117',
+                        plot_bgcolor='#161b22',
+                        font=dict(color='#8b949e'),
+                        height=560,
+                        xaxis_rangeslider_visible=False,
+                        margin=dict(l=10, r=10, t=30, b=10),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    )
+                    fig.update_xaxes(gridcolor='#21262d', zeroline=False)
+                    fig.update_yaxes(gridcolor='#21262d', zeroline=False)
+                    st.plotly_chart(fig, use_container_width=True)
+
+            # -------------------------------------------------------------
+            # TAB 2: 除權息 / 股東會 / 重大行事曆
+            # -------------------------------------------------------------
+            with tab2:
+                st.markdown(f"#### 📅 {display_name} 重大公司事件與除權息日程表")
+                if events:
+                    event_df = pd.DataFrame(events)
+                    st.dataframe(event_df, use_container_width=True, hide_index=True)
+                else:
+                    st.info("目前無即將到來的重大除權息或法說會日程公告。")
+                    
+                st.markdown("""
+                <div class="card-box" style="margin-top:15px;">
+                    <h5 style="color:#58a6ff; margin-top:0;">💡 除權息交易小撇步</h5>
+                    <ul>
+                        <li><b>除息日前一日買進</b>：即可享有當期現金股利分配權利。</li>
+                        <li><b>填息觀察</b>：若基本面獲利強勁且處於多頭排列，除息後通常在數日至數週內完成填息。</li>
+                    </ul>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # -------------------------------------------------------------
+            # TAB 3: 未來情境預測
+            # -------------------------------------------------------------
+            with tab3:
                 st.markdown("#### 🔮 該檔股票未來 1~3 個月趨勢預測與劇本拆解")
                 col_sc1, col_sc2, col_sc3 = st.columns(3)
                 
@@ -432,91 +601,10 @@ if search_query:
                     </div>
                     """, unsafe_allow_html=True)
 
-            # TAB 2: 技術圖表
-            with tab2:
-                col_chart, col_sig = st.columns([7, 3])
-                
-                with col_sig:
-                    st.markdown("#### 🎯 即時指標買賣訊號")
-                    signals = []
-                    
-                    if not np.isnan(latest["K"]) and not np.isnan(latest["D"]):
-                        if prev["K"] < prev["D"] and latest["K"] > latest["D"] and latest["K"] < 35:
-                            signals.append(("buy", "🟢 KD 低檔黃金交叉（短線超賣強烈買點）"))
-                        elif prev["K"] > prev["D"] and latest["K"] < latest["D"] and latest["K"] > 65:
-                            signals.append(("sell", "🔴 KD 高檔死亡交叉（短線過熱減碼訊號）"))
-                    
-                    if curr_price > latest["MA20"] and prev_price <= prev["MA20"]:
-                        signals.append(("buy", "🟢 站上 20 日月線（短多翻揚訊號）"))
-                    elif curr_price < latest["MA20"] and prev_price >= prev["MA20"]:
-                        signals.append(("sell", "🔴 跌破 20 日月線（短線轉弱整理）"))
-                        
-                    if curr_price <= latest["BB_lower"]:
-                        signals.append(("buy", "🟢 觸及布林下軌（超跌跌破下緣，容易反彈）"))
-                    elif curr_price >= latest["BB_upper"]:
-                        signals.append(("sell", "🔴 觸及布林上軌（短線逼近乖離上緣，防回檔）"))
-                        
-                    if signals:
-                        for stype, stxt in signals:
-                            cls = "signal-buy" if stype == "buy" else "signal-sell"
-                            st.markdown(f'<div class="{cls}">{stxt}</div>', unsafe_allow_html=True)
-                    else:
-                        st.markdown('<div class="signal-neutral">🟡 目前均線與指標處於標準通道內，無極端轉折買賣點。</div>', unsafe_allow_html=True)
-                        
-                    st.markdown("---")
-                    st.markdown("#### 📐 三竹關鍵價位整理")
-                    st.markdown(f"""
-                    * **壓力二 (波段高)**: `${res2}`
-                    * **壓力一 (短期阻力)**: `${res1}`
-                    * **現價**: `${curr_price:.2f}`
-                    * **支撐一 (月線防守)**: `${sup1}`
-                    * **支撐二 (季線鐵板)**: `${sup2}`
-                    """)
-                    
-                with col_chart:
-                    fig = make_subplots(
-                        rows=2, cols=1,
-                        shared_xaxes=True,
-                        vertical_spacing=0.06,
-                        row_heights=[0.72, 0.28],
-                        subplot_titles=('K 線走勢與關鍵支撐壓力線', 'RSI 相對強弱指標')
-                    )
-                    
-                    fig.add_trace(go.Candlestick(
-                        x=df.index,
-                        open=df['Open'], high=df['High'],
-                        low=df['Low'], close=df['Close'],
-                        name='K線',
-                        increasing_line_color='#f85149', increasing_fillcolor='#f85149',
-                        decreasing_line_color='#3fb950', decreasing_fillcolor='#3fb950'
-                    ), row=1, col=1)
-                    
-                    fig.add_trace(go.Scatter(x=df.index, y=df['MA5'], name='5MA', line=dict(color='#d29922', width=1.2)), row=1, col=1)
-                    fig.add_trace(go.Scatter(x=df.index, y=df['MA20'], name='20MA(月線)', line=dict(color='#58a6ff', width=1.6)), row=1, col=1)
-                    fig.add_trace(go.Scatter(x=df.index, y=df['MA60'], name='60MA(季線)', line=dict(color='#bc8cff', width=1.8)), row=1, col=1)
-                    
-                    fig.add_hline(y=res1, line_dash="dash", line_color="#f85149", annotation_text=f"壓力 ${res1}", row=1, col=1)
-                    fig.add_hline(y=sup1, line_dash="dash", line_color="#3fb950", annotation_text=f"支撐 ${sup1}", row=1, col=1)
-                    
-                    fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], name='RSI', line=dict(color='#f778ba', width=1.5)), row=2, col=1)
-                    fig.add_hline(y=70, line_dash="dot", line_color="#f85149", row=2, col=1)
-                    fig.add_hline(y=30, line_dash="dot", line_color="#3fb950", row=2, col=1)
-                    
-                    fig.update_layout(
-                        paper_bgcolor='#0e1117',
-                        plot_bgcolor='#161b22',
-                        font=dict(color='#8b949e'),
-                        height=540,
-                        xaxis_rangeslider_visible=False,
-                        margin=dict(l=10, r=10, t=30, b=10),
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                    )
-                    fig.update_xaxes(gridcolor='#21262d', zeroline=False)
-                    fig.update_yaxes(gridcolor='#21262d', zeroline=False)
-                    st.plotly_chart(fig, use_container_width=True)
-
-            # TAB 3: 真實動態基本面 (100% 官方數據直出)
-            with tab3:
+            # -------------------------------------------------------------
+            # TAB 4: 基本面真實財務評價
+            # -------------------------------------------------------------
+            with tab4:
                 st.markdown("#### 🏢 即時真實財務指標與基本面評價")
                 f1, f2 = st.columns(2)
                 
