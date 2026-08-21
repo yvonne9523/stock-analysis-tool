@@ -485,7 +485,7 @@ if search_query:
             """, unsafe_allow_html=True)
             
             # -------------------------------------------------------------
-            # 【持股診斷功能】直接移至個股抬頭下方，與個股緊密結合 (移除選填字眼)
+            # 【持股診斷功能】將輸入框 key 綁定個股代碼，換股時自動重設為 0.0，等待新輸入
             # -------------------------------------------------------------
             with st.expander("💼 我的持股診斷 (點擊展開輸入成本價)", expanded=False):
                 col_cost_in, col_cost_btn = st.columns([4, 6])
@@ -496,12 +496,12 @@ if search_query:
                         value=0.0,
                         step=0.5,
                         format="%.2f",
-                        key="main_cost_input",
+                        key=f"cost_input_{clean_code}",
                         help="輸入您目前手上的持股成本，AI 將為您即時計算損益並提供賣出/加碼建議！"
                     )
             
-            # 若有輸入成本價，立即動態展示診斷卡片
-            if 'my_cost_input' in locals() and my_cost_input > 0:
+            # 只有當使用者針對「當前股票」輸入大於 0 的金額時，才顯示該股專屬診斷報告
+            if my_cost_input > 0:
                 cost_diff = curr_price - my_cost_input
                 cost_pct = (cost_diff / my_cost_input) * 100
                 cost_color = "#f85149" if cost_diff >= 0 else "#3fb950"
@@ -529,7 +529,7 @@ if search_query:
                 st.markdown(f"""
                 <div class="card-box" style="border: 2px solid {box_border}; background: rgba(22, 27, 34, 0.95); margin-bottom: 20px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-bottom: 8px;">
-                        <h4 style="margin: 0; color: #58a6ff;">💼 個人持股專屬診斷報告</h4>
+                        <h4 style="margin: 0; color: #58a6ff;">💼 個人持股專屬診斷報告 ({display_name})</h4>
                         <div style="font-size: 1.1rem; font-weight: 700; color: {cost_color};">
                             您的成本: ${my_cost_input:,.2f} ｜ 浮動損益: {cost_sign}{cost_diff:,.2f} ({cost_sign}{cost_pct:.2f}%)
                         </div>
