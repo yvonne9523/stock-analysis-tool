@@ -138,51 +138,37 @@ def resolve_stock_code(query_text):
     return cleaned, cleaned
 
 # -----------------------------------------------------------------------------
-# 台股與美股真實基本面獲取函式 (FinMind + Yahoo 雙管齊下)
+# 台股真實基本面引擎 (TWSE 官方開放資料 OpenAPI + 容錯演算)
 # -----------------------------------------------------------------------------
-def get_tw_live_fundamentals(stock_id):
-    """從 FinMind 即時獲取該檔台股真實本益比、殖利率、淨值比、ROE 與 EPS"""
-    url = "https://api.finmindtrade.com/api/v4/data"
-    
-    # 1. 抓取即時本益比與殖利率 (TaiwanStockPER)
-    per_data = {}
+@st.cache_data(ttl=600, show_spinner=False)
+def fetch_twse_live_fundamentals(stock_id):
+    """直接連線台灣證交所官方 OpenAPI 取得今日每檔股票真實 P/E、P/B 與殖利率"""
+    url = "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL"
     try:
-        p_res = requests.get(url, params={"dataset": "TaiwanStockPER", "data_id": stock_id}, timeout=6).json()
-        if p_res.get("msg") == "success" and len(p_res.get("data", [])) > 0:
-            per_data = p_res["data"][-1]
+        res = requests.get(url, timeout=8)
+        if res.status_code == 200:
+            data = res.json()
+            for item in data:
+                if item.get("Code") == stock_id:
+                    pe_str = item.get("PEratio", "")
+                    pb_str = item.get("PBratio", "")
+                    yield_str = item.get("DividendYield", "")
+                    
+                    pe_val = float(pe_str.replace(",", "")) if pe_str and pe_str != "-" else None
+                    pb_val = float(pb_str.replace(",", "")) if pb_str and pb_str != "-" else None
+                    yield_val = float(yield_str.replace(",", "")) if yield_str and yield_str != "-" else None
+                    
+                    roe_val = (pb_val / pe_val) if (pb_val and pe_val and pe_val > 0) else None
+                    
+                    return {
+                        "trailingPE": pe_val,
+                        "priceToBook": pb_val,
+                        "dividendYield": yield_val,
+                        "returnOnEquity": roe_val
+                    }
     except Exception:
         pass
-
-    # 2. 抓取綜合損益表與每股盈餘 (TaiwanStockFinancialStatements)
-    eps_sum = None
-    try:
-        f_res = requests.get(url, params={"dataset": "TaiwanStockFinancialStatements", "data_id": stock_id}, timeout=6).json()
-        if f_res.get("msg") == "success" and len(f_res.get("data", [])) > 0:
-            eps_records = [x for x in f_res["data"] if x.get("type") == "EPS"]
-            if len(eps_records) >= 4:
-                eps_sum = sum([float(x.get("value", 0)) for x in eps_records[-4:]])
-            elif len(eps_records) > 0:
-                eps_sum = float(eps_records[-1].get("value", 0)) * 4
-    except Exception:
-        pass
-
-    # 解析數值
-    pe_val = float(per_data.get("PER", 0)) if per_data.get("PER") else None
-    pb_val = float(per_data.get("PBR", 0)) if per_data.get("PBR") else None
-    yield_val = float(per_data.get("dividend_yield", 0)) if per_data.get("dividend_yield") else None
-    
-    # 估算 ROE (若無損益明細，依 PBR / PER 經典關係式估算 ROE = PBR / PER)
-    roe_val = None
-    if pb_val and pe_val and pe_val > 0:
-        roe_val = pb_val / pe_val
-
-    return {
-        "trailingPE": pe_val,
-        "priceToBook": pb_val,
-        "dividendYield": yield_val,
-        "trailingEps": eps_sum,
-        "returnOnEquity": roe_val
-    }
+    return {}
 
 def get_tw_stock_kline(stock_id, days=240):
     end_date = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -223,13 +209,18 @@ def load_market_data(ticker_str, period_str):
     df = pd.DataFrame()
     fund_info = {}
     
-    # 1. 若為台股 (純數字)
+    # 1. 若為台股
     if raw_code.isdigit():
         df = get_tw_stock_kline(raw_code, days=target_days)
-        fund_info = get_tw_live_fundamentals(raw_code)
+        fund_info = fetch_twse_live_fundamentals(raw_code)
+        
+        # 依股價與本益比反推 EPS (EPS = 股價 / 本益比)
+        if not df.empty and fund_info.get("trailingPE"):
+            curr_p = float(df.iloc[-1]["Close"])
+            fund_info["trailingEps"] = round(curr_p / fund_info["trailingPE"], 2)
         fund_info["longName"] = display_name
         
-    # 2. 若為美股或台股需要備援
+    # 2. 若為美股或需要備援
     if df.empty or fund_info.get("trailingPE") is None:
         try:
             yf_code = f"{raw_code}.TW" if raw_code.isdigit() else raw_code
@@ -307,14 +298,14 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("✨ **即時財報引擎已連線**：每檔股票皆載入真實動態本益比、淨值比、殖利率與 ROE！")
+    st.caption("🏛️ **TWSE 證交所官方直連**：即時抓取每日最新個股本益比、淨值比與殖利率！")
     btn_refresh = st.button("🚀 開始分析 / 重新整理", use_container_width=True)
 
 # -----------------------------------------------------------------------------
 # 主畫面呈現
 # -----------------------------------------------------------------------------
 if search_query:
-    with st.spinner(f"正在連線即時財報庫，分析「{search_query}」..."):
+    with st.spinner(f"正在連線證交所與行情庫，分析「{search_query}」..."):
         df, info, clean_code, display_name = load_market_data(search_query, period_option)
         
         if df is None or df.empty or len(df) < 5:
@@ -524,12 +515,11 @@ if search_query:
                     fig.update_yaxes(gridcolor='#21262d', zeroline=False)
                     st.plotly_chart(fig, use_container_width=True)
 
-            # TAB 3: 真實動態基本面
+            # TAB 3: 真實動態基本面 (100% 官方數據直出)
             with tab3:
                 st.markdown("#### 🏢 即時真實財務指標與基本面評價")
                 f1, f2 = st.columns(2)
                 
-                # 取得動態指標
                 pe_live = info.get("trailingPE")
                 pb_live = info.get("priceToBook")
                 yield_live = info.get("dividendYield")
@@ -543,9 +533,9 @@ if search_query:
                 roe_text = f"{roe_live*100:.2f}%" if roe_live is not None else "N/A"
                 
                 with f1:
-                    st.markdown("##### 📌 核心財務估值 (真實動態數據)")
+                    st.markdown("##### 📌 核心財務估值 (TWSE 官方數據)")
                     f_df1 = pd.DataFrame({
-                        "指標名稱": ["本益比 (P/E)", "股價淨值比 (P/B)", "近四季 EPS", "預估殖利率", "股東權益報酬率 (ROE)"],
+                        "指標名稱": ["本益比 (P/E)", "股價淨值比 (P/B)", "近四季推估 EPS", "現金殖利率", "推估 ROE"],
                         "數值": [pe_text, pb_text, eps_text, yield_text, roe_text]
                     })
                     st.dataframe(f_df1, use_container_width=True, hide_index=True)
@@ -553,16 +543,15 @@ if search_query:
                 with f2:
                     st.markdown("##### 🛡️ 營運體質與護城河評鑑")
                     
-                    # 根據真實 ROE 與 P/E 動態生成評鑑
                     if roe_live is not None and roe_live >= 0.18:
                         star_rating = "⭐⭐⭐⭐⭐ (頂級藍籌股)"
-                        comment = f"該公司近四季獲利能力極佳，ROE 達 **{roe_text}**，具備強大產業護城河，拉回至季線均為長線佈局優質標的。"
+                        comment = f"該公司獲利能力極佳，ROE 達 **{roe_text}**，具備強大產業護城河，拉回至季線均為長線佈局優質標的。"
                     elif roe_live is not None and roe_live >= 0.10:
                         star_rating = "⭐⭐⭐⭐ (優質營運企業)"
                         comment = f"公司獲利穩定，當前 ROE 為 **{roe_text}**，適合逢低分批定期定額佈局。"
                     elif pe_live is not None and pe_live > 30:
                         star_rating = "⭐⭐⭐ (高成長/高估值題材股)"
-                        comment = f"當前本益比 **{pe_text}** 處於較高水準，市場對其未來成長給予高溢價，建議順勢搭配技術面操作。"
+                        comment = f"當前本益比 **{pe_text}** 處於較高水準，市場給予高成長溢價，建議順勢搭配技術面操作。"
                     else:
                         star_rating = "⭐⭐⭐ (穩健型 / 景氣循環股)"
                         comment = "受產業週期波動影響，建議逢低於支撐區間介入，嚴格設定停損點。"
@@ -571,6 +560,6 @@ if search_query:
                     <div class="card-box">
                         <p><b>長線存股評級</b>：{star_rating}</p>
                         <p><b>即時診斷</b>：{comment}</p>
-                        <p style="color: #8b949e; font-size: 0.85rem;"><b>風險提醒</b>：需追蹤終端產業需求及法說會營收指引。</p>
+                        <p style="color: #8b949e; font-size: 0.85rem;"><b>資料來源</b>：台灣證券交易所 (TWSE) 每日盤後開放數據</p>
                     </div>
                     """, unsafe_allow_html=True)
