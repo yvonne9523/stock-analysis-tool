@@ -40,34 +40,36 @@ st.markdown("""
     .target-val-stop { font-size: 1.45rem; font-weight: 700; color: #e3b341; }
     .target-desc { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     
-    .signal-buy {
-        background-color: rgba(248, 81, 73, 0.15);
-        border-left: 4px solid #f85149;
-        color: #ff7b72;
-        padding: 12px 16px;
-        border-radius: 6px;
-        margin-bottom: 10px;
-        font-weight: 600;
+    /* 核心入手決策卡片 */
+    .decision-strong-buy {
+        background: linear-gradient(145deg, rgba(248, 81, 73, 0.25), rgba(248, 81, 73, 0.08));
+        border: 2px solid #f85149;
+        border-radius: 8px;
+        padding: 14px 18px;
+        margin-bottom: 12px;
     }
-    .signal-sell {
-        background-color: rgba(63, 185, 80, 0.15);
-        border-left: 4px solid #3fb950;
-        color: #7ee787;
-        padding: 12px 16px;
-        border-radius: 6px;
-        margin-bottom: 10px;
-        font-weight: 600;
+    .decision-batch-buy {
+        background: linear-gradient(145deg, rgba(56, 189, 248, 0.25), rgba(56, 189, 248, 0.08));
+        border: 2px solid #38bdf8;
+        border-radius: 8px;
+        padding: 14px 18px;
+        margin-bottom: 12px;
     }
-    .signal-neutral {
-        background-color: rgba(139, 148, 158, 0.12);
-        border-left: 4px solid #8b949e;
-        color: #c9d1d9;
-        padding: 12px 16px;
-        border-radius: 6px;
-        margin-bottom: 10px;
+    .decision-wait {
+        background: linear-gradient(145deg, rgba(227, 179, 65, 0.25), rgba(227, 179, 65, 0.08));
+        border: 2px solid #e3b341;
+        border-radius: 8px;
+        padding: 14px 18px;
+        margin-bottom: 12px;
     }
-    
-    /* 橫向單選按鈕膠囊美化 */
+    .decision-avoid {
+        background: linear-gradient(145deg, rgba(63, 185, 80, 0.25), rgba(63, 185, 80, 0.08));
+        border: 2px solid #3fb950;
+        border-radius: 8px;
+        padding: 14px 18px;
+        margin-bottom: 12px;
+    }
+
     div[data-testid="stRadio"] > div {
         flex-direction: row;
         align-items: center;
@@ -77,7 +79,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 台美股代碼中英字典
+# 台美股代碼字典
 # -----------------------------------------------------------------------------
 COMMON_STOCK_MAP = {
     "台積電": "2330", "TSMC": "2330", "2330": "2330",
@@ -117,7 +119,7 @@ def resolve_stock_code(query_text):
     return cleaned, cleaned
 
 # -----------------------------------------------------------------------------
-# 資料獲取模組 (K線、證交所財報、除權息與重大事件日程)
+# 資料獲取模組
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=600, show_spinner=False)
 def fetch_twse_live_fundamentals(stock_id):
@@ -131,12 +133,10 @@ def fetch_twse_live_fundamentals(stock_id):
                     pe_str = item.get("PEratio", "")
                     pb_str = item.get("PBratio", "")
                     yield_str = item.get("DividendYield", "")
-                    
                     pe_val = float(pe_str.replace(",", "")) if pe_str and pe_str != "-" else None
                     pb_val = float(pb_str.replace(",", "")) if pb_str and pb_str != "-" else None
                     yield_val = float(yield_str.replace(",", "")) if yield_str and yield_str != "-" else None
                     roe_val = (pb_val / pe_val) if (pb_val and pe_val and pe_val > 0) else None
-                    
                     return {
                         "trailingPE": pe_val,
                         "priceToBook": pb_val,
@@ -238,32 +238,25 @@ def load_market_data(ticker_str, period_str):
     events = fetch_corporate_events(raw_code)
     return df, fund_info, raw_code, display_name, events
 
-# -----------------------------------------------------------------------------
-# 計算全套三竹指標
-# -----------------------------------------------------------------------------
 def compute_all_indicators(df):
     if df.empty or len(df) < 5:
         return df
     
-    # 1. 均線 MA
     df["MA5"] = df["Close"].rolling(window=5).mean()
     df["MA20"] = df["Close"].rolling(window=20).mean()
     df["MA60"] = df["Close"].rolling(window=60).mean()
     
-    # 2. 布林通道
     df["BB_mid"] = df["Close"].rolling(window=20).mean()
     df["BB_std"] = df["Close"].rolling(window=20).std()
     df["BB_upper"] = df["BB_mid"] + 2 * df["BB_std"]
     df["BB_lower"] = df["BB_mid"] - 2 * df["BB_std"]
     
-    # 3. RSI (14)
     delta = df["Close"].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / (loss + 1e-9)
     df["RSI"] = 100 - (100 / (1 + rs))
     
-    # 4. KD (14, 3)
     low_min = df["Low"].rolling(window=14).min()
     high_max = df["High"].rolling(window=14).max()
     rsv = 100 * ((df["Close"] - low_min) / (high_max - low_min + 1e-9))
@@ -282,7 +275,6 @@ def compute_all_indicators(df):
     df["K"] = k_list
     df["D"] = d_list
     
-    # 5. MACD (DIF, DEM 9, OSC)
     ema12 = df["Close"].ewm(span=12, adjust=False).mean()
     ema26 = df["Close"].ewm(span=26, adjust=False).mean()
     df["MACD_DIF"] = ema12 - ema26
@@ -292,7 +284,7 @@ def compute_all_indicators(df):
     return df
 
 # -----------------------------------------------------------------------------
-# 側邊欄控制項 (只保留最基本的搜尋與週期)
+# 側邊欄
 # -----------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("### 🔍 智慧股票終端")
@@ -313,10 +305,10 @@ with st.sidebar:
     btn_refresh = st.button("🚀 重新載入", use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 主畫面核心計算與展示
+# 主畫面呈現
 # -----------------------------------------------------------------------------
 if search_query:
-    with st.spinner(f"正在載入「{search_query}」圖表與除權息日程..."):
+    with st.spinner(f"正在載入「{search_query}」圖表與決策診斷..."):
         df, info, clean_code, display_name, events = load_market_data(search_query, period_option)
         
         if df is None or df.empty or len(df) < 5:
@@ -330,6 +322,8 @@ if search_query:
             prev_price = float(prev["Close"])
             diff = curr_price - prev_price
             pct = (diff / prev_price) * 100 if prev_price != 0 else 0
+            
+            now_time_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
             
             recent_window = df.tail(min(len(df), 60))
             recent_high = float(recent_window["High"].max())
@@ -348,11 +342,10 @@ if search_query:
             target_sell_price = round(max(res1, curr_price * 1.08), 1)
             stop_loss_price = round(curr_price * 0.93, 1)
             
-            # 頁首
             st.markdown(f"""
             <div style="margin-bottom: 15px;">
                 <h1 style="margin: 0; font-size: 2.1rem; color: #f0f6fc;">{display_name} <span style="font-size: 1.2rem; color: #58a6ff;">({clean_code})</span></h1>
-                <span style="color: #8b949e; font-size: 0.9rem;">更新日期：{latest.name.strftime('%Y-%m-%d')} ｜ 現價：<b style="color:{'#f85149' if diff>=0 else '#3fb950'}; font-size: 1.1rem;">${curr_price:,.2f}</b> ({diff:+,.2f}, {pct:+.2f}%)</span>
+                <span style="color: #8b949e; font-size: 0.9rem;">更新時間：<b>{now_time_str}</b> ｜ 現價：<b style="color:{'#f85149' if diff>=0 else '#3fb950'}; font-size: 1.1rem;">${curr_price:,.2f}</b> ({diff:+,.2f}, {pct:+.2f}%)</span>
             </div>
             """, unsafe_allow_html=True)
             
@@ -405,7 +398,6 @@ if search_query:
                 </div>
                 """, unsafe_allow_html=True)
 
-            # 分頁標籤
             tab1, tab2, tab3, tab4 = st.tabs([
                 "📊 支撐壓力 K 線與全指標",
                 "📅 除權息 / 股東會 / 重大行事曆",
@@ -414,50 +406,75 @@ if search_query:
             ])
             
             # -------------------------------------------------------------
-            # TAB 1: 增強版支撐壓力 K 線圖 + 圖表頂部指標切換按鈕
+            # TAB 1: 診斷入手確定性 + K 線圖
             # -------------------------------------------------------------
             with tab1:
                 col_chart, col_sig = st.columns([7.2, 2.8])
                 
                 with col_sig:
-                    st.markdown("#### 🎯 即時買賣訊號判讀")
-                    signals = []
+                    st.markdown("#### 🚦 確定能否入手 (AI 核心診斷)")
                     
-                    if latest["MACD_OSC"] > 0 and prev["MACD_OSC"] <= 0:
-                        signals.append(("buy", "🟢 MACD 柱狀體翻紅 (多頭動能轉強)"))
-                    elif latest["MACD_OSC"] < 0 and prev["MACD_OSC"] >= 0:
-                        signals.append(("sell", "🔴 MACD 柱狀體翻綠 (多方動能衰退)"))
+                    # 核心進場條件邏輯判定
+                    c_ma = curr_price > latest["MA20"]
+                    c_macd = latest["MACD_OSC"] > 0
+                    c_kd = (latest["K"] > latest["D"]) and (latest["K"] < 75)
+                    c_rsi_safe = latest["RSI"] < 70
+                    c_near_sup = curr_price <= (sup1 * 1.03)
                     
-                    if not np.isnan(latest["K"]) and not np.isnan(latest["D"]):
-                        if prev["K"] < prev["D"] and latest["K"] > latest["D"] and latest["K"] < 35:
-                            signals.append(("buy", "🟢 KD 低檔黃金交叉 (超賣轉折買點)"))
-                        elif prev["K"] > prev["D"] and latest["K"] < latest["D"] and latest["K"] > 65:
-                            signals.append(("sell", "🔴 KD 高檔死亡交叉 (超買回檔訊號)"))
+                    entry_points = sum([c_ma, c_macd, c_kd, c_rsi_safe])
                     
-                    if curr_price > latest["MA20"] and prev_price <= prev["MA20"]:
-                        signals.append(("buy", "🟢 站上 20 日月線 (短多突破)"))
-                    elif curr_price < latest["MA20"] and prev_price >= prev["MA20"]:
-                        signals.append(("sell", "🔴 跌破 20 日月線 (短線轉弱)"))
-                        
-                    if signals:
-                        for stype, stxt in signals:
-                            cls = "signal-buy" if stype == "buy" else "signal-sell"
-                            st.markdown(f'<div class="{cls}">{stxt}</div>', unsafe_allow_html=True)
+                    if entry_points >= 4:
+                        d_class = "decision-strong-buy"
+                        d_title = "🟢 【強烈建議入手】多頭主升段確立"
+                        d_desc = f"各項技術指標共振偏多，站穩月線 (${latest['MA20']:.1f}) 且動能充沛，適合右側進場或加碼持有。"
+                    elif c_near_sup and c_ma:
+                        d_class = "decision-batch-buy"
+                        d_title = "🔵 【可分批入手】回測支撐有守"
+                        d_desc = f"股價回測月線/支撐區 (${sup1:.1f})，盈虧比極佳，建議採分批掛單建倉策略。"
+                    elif latest["RSI"] >= 70:
+                        d_class = "decision-wait"
+                        d_title = "🟠 【暫緩入手】短線指標過熱 (防拉回)"
+                        d_desc = f"RSI 高達 {latest['RSI']:.1f} 處於超買區，隨時可能回測均線，請勿追高，靜待回檔至支撐再進。"
+                    elif not c_ma:
+                        d_class = "decision-avoid"
+                        d_title = "🔴 【不宜入手】短期格局偏空"
+                        d_desc = f"股價位於月線 (${latest['MA20']:.1f}) 之下，空方力道主導，尚未出現止跌打底轉折訊號。"
                     else:
-                        st.markdown('<div class="signal-neutral">🟡 目前均線與各指標處於常態整理，無極端買賣轉折。</div>', unsafe_allow_html=True)
+                        d_class = "decision-wait"
+                        d_title = "🟡 【建議觀望】等待方向明朗"
+                        d_desc = f"處於 ${sup1:.1f} ~ ${res1:.1f} 區間盤整，等待帶量突破壓力位後再順勢進場。"
                         
-                    st.markdown("---")
-                    st.markdown("#### 📐 關鍵價位速查")
+                    # 呈現大標籤
                     st.markdown(f"""
-                    * **壓力二 (波段高)**: `${res2}`
-                    * **壓力一 (短期阻力)**: `${res1}`
+                    <div class="{d_class}">
+                        <div style="font-size: 1.05rem; font-weight: 700; color: #ffffff; margin-bottom: 6px;">{d_title}</div>
+                        <div style="font-size: 0.85rem; color: #e2e8f0; line-height: 1.5;">{d_desc}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    st.markdown("##### 📋 入手指標檢核清單")
+                    check_ma = "✅ 站上 20MA 月線 (多頭排列)" if c_ma else "❌ 跌破 20MA 月線 (走弱)"
+                    check_macd = "✅ MACD 柱狀體為紅 (動能向上)" if c_macd else "❌ MACD 柱狀體為綠 (動能減弱)"
+                    check_kd = "✅ KD 黃金交叉/偏多向上" if c_kd else "❌ KD 處於高檔過熱或死亡交叉"
+                    check_rsi = f"✅ RSI 安全區 ({latest['RSI']:.1f})" if c_rsi_safe else f"⚠️ RSI 嚴重過熱 ({latest['RSI']:.1f})"
+                    
+                    st.markdown(f"""
+                    * {check_ma}
+                    * {check_macd}
+                    * {check_kd}
+                    * {check_rsi}
+                    """)
+                    
+                    st.markdown("---")
+                    st.markdown("#### 📐 關鍵支撐與壓力")
+                    st.markdown(f"""
+                    * **目標壓力價**: `${res1}`
                     * **現價**: `${curr_price:.2f}`
-                    * **支撐一 (月線防守)**: `${sup1}`
-                    * **支撐二 (季線鐵板)**: `${sup2}`
+                    * **關鍵防守支撐**: `${sup1}`
+                    * **嚴格停損底線**: `${stop_loss_price}`
                     """)
                     
                 with col_chart:
-                    # 💡 直接將副圖選擇切換移至 K 線圖正上方 (橫向膠囊排版，側邊欄收縮也不受影響)
                     sub_indicator = st.radio(
                         "📊 切換下方副圖指標：",
                         options=["Volume (成交量)", "MACD (指數平滑異同)", "KD (隨機指標 14,3)", "RSI (相對強弱 14)"],
@@ -465,7 +482,6 @@ if search_query:
                         horizontal=True
                     )
                     
-                    # 繪製主副圖
                     fig = make_subplots(
                         rows=2, cols=1,
                         shared_xaxes=True,
@@ -489,7 +505,7 @@ if search_query:
                     fig.add_trace(go.Scatter(x=df.index, y=df['MA20'], name='20MA(月線)', line=dict(color='#58a6ff', width=1.6)), row=1, col=1)
                     fig.add_trace(go.Scatter(x=df.index, y=df['MA60'], name='60MA(季線)', line=dict(color='#bc8cff', width=1.8)), row=1, col=1)
                     
-                    # 支撐與壓力線 (高清晰置左標籤 + 背景色塊框)
+                    # 支撐與壓力線
                     fig.add_hline(
                         y=res1, line_dash="dash", line_color="#f85149", line_width=2,
                         annotation_text=f" 🚨 壓力位 ${res1} ",
@@ -541,9 +557,7 @@ if search_query:
                     fig.update_yaxes(gridcolor='#21262d', zeroline=False)
                     st.plotly_chart(fig, use_container_width=True)
 
-            # -------------------------------------------------------------
-            # TAB 2: 除權息 / 股東會 / 重大行事曆
-            # -------------------------------------------------------------
+            # TAB 2: 除權息日程
             with tab2:
                 st.markdown(f"#### 📅 {display_name} 重大公司事件與除權息日程表")
                 if events:
@@ -562,9 +576,7 @@ if search_query:
                 </div>
                 """, unsafe_allow_html=True)
 
-            # -------------------------------------------------------------
             # TAB 3: 未來情境預測
-            # -------------------------------------------------------------
             with tab3:
                 st.markdown("#### 🔮 該檔股票未來 1~3 個月趨勢預測與劇本拆解")
                 col_sc1, col_sc2, col_sc3 = st.columns(3)
@@ -599,9 +611,7 @@ if search_query:
                     </div>
                     """, unsafe_allow_html=True)
 
-            # -------------------------------------------------------------
-            # TAB 4: 基本面真實財務評價
-            # -------------------------------------------------------------
+            # TAB 4: 基本面
             with tab4:
                 st.markdown("#### 🏢 即時真實財務指標與基本面評價")
                 f1, f2 = st.columns(2)
