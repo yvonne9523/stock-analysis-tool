@@ -66,6 +66,13 @@ st.markdown("""
         border-radius: 6px;
         margin-bottom: 10px;
     }
+    
+    /* 橫向單選按鈕膠囊美化 */
+    div[data-testid="stRadio"] > div {
+        flex-direction: row;
+        align-items: center;
+        gap: 15px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -169,19 +176,15 @@ def get_tw_stock_kline(stock_id, days=240):
         pass
     return pd.DataFrame()
 
-# 獲取重大日程 (除權息、股東會、法說會)
 @st.cache_data(ttl=600, show_spinner=False)
 def fetch_corporate_events(ticker_symbol):
     events = []
     try:
-        # Yahoo Finance Calendar / Events
         t = yf.Ticker(f"{ticker_symbol}.TW" if ticker_symbol.isdigit() else ticker_symbol)
         cal = t.calendar
         if cal is not None and not cal.empty:
             for col in cal.columns:
                 events.append({"項目": "法說會/財報公布", "日期": str(cal[col].values[0])[:10], "備註": "官方預計發布日程"})
-        
-        # 股利除息日程
         divs = t.dividends
         if divs is not None and not divs.empty:
             last_div_date = divs.index[-1].strftime("%Y-%m-%d")
@@ -190,7 +193,6 @@ def fetch_corporate_events(ticker_symbol):
     except Exception:
         pass
         
-    # 台股預設日程防護
     if not events and ticker_symbol.isdigit():
         events = [
             {"項目": "常態除權息", "日期": "每年 6 ~ 8 月", "備註": "視董事會與除息公告訂定"},
@@ -237,7 +239,7 @@ def load_market_data(ticker_str, period_str):
     return df, fund_info, raw_code, display_name, events
 
 # -----------------------------------------------------------------------------
-# 計算全套三竹指標 (均線、KD、RSI、MACD、成交量)
+# 計算全套三竹指標
 # -----------------------------------------------------------------------------
 def compute_all_indicators(df):
     if df.empty or len(df) < 5:
@@ -280,7 +282,7 @@ def compute_all_indicators(df):
     df["K"] = k_list
     df["D"] = d_list
     
-    # 5. MACD (DIF, MACD 9, OSC 柱狀體)
+    # 5. MACD (DIF, DEM 9, OSC)
     ema12 = df["Close"].ewm(span=12, adjust=False).mean()
     ema26 = df["Close"].ewm(span=26, adjust=False).mean()
     df["MACD_DIF"] = ema12 - ema26
@@ -290,7 +292,7 @@ def compute_all_indicators(df):
     return df
 
 # -----------------------------------------------------------------------------
-# 側邊欄控制
+# 側邊欄控制項 (只保留最基本的搜尋與週期)
 # -----------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("### 🔍 智慧股票終端")
@@ -305,14 +307,6 @@ with st.sidebar:
         options=["3mo", "6mo", "1y", "2y"],
         index=1,
         format_func=lambda x: {"3mo": "近 3 個月", "6mo": "近 6 個月", "1y": "近 1 年", "2y": "近 2 年"}.get(x, x)
-    )
-    
-    st.markdown("---")
-    st.markdown("### 📊 下方副圖指標切換")
-    sub_indicator = st.radio(
-        "選擇要顯示的副圖指標：",
-        options=["MACD (指數平滑異同)", "KD (隨機指標 14,3)", "RSI (相對強弱 14)", "Volume (成交量)"],
-        index=0
     )
     
     st.markdown("---")
@@ -420,7 +414,7 @@ if search_query:
             ])
             
             # -------------------------------------------------------------
-            # TAB 1: 增強版支撐壓力 K 線圖 + 全套多指標副圖
+            # TAB 1: 增強版支撐壓力 K 線圖 + 圖表頂部指標切換按鈕
             # -------------------------------------------------------------
             with tab1:
                 col_chart, col_sig = st.columns([7.2, 2.8])
@@ -429,20 +423,17 @@ if search_query:
                     st.markdown("#### 🎯 即時買賣訊號判讀")
                     signals = []
                     
-                    # MACD 訊號
                     if latest["MACD_OSC"] > 0 and prev["MACD_OSC"] <= 0:
                         signals.append(("buy", "🟢 MACD 柱狀體翻紅 (多頭動能轉強)"))
                     elif latest["MACD_OSC"] < 0 and prev["MACD_OSC"] >= 0:
                         signals.append(("sell", "🔴 MACD 柱狀體翻綠 (多方動能衰退)"))
                     
-                    # KD 訊號
                     if not np.isnan(latest["K"]) and not np.isnan(latest["D"]):
                         if prev["K"] < prev["D"] and latest["K"] > latest["D"] and latest["K"] < 35:
                             signals.append(("buy", "🟢 KD 低檔黃金交叉 (超賣轉折買點)"))
                         elif prev["K"] > prev["D"] and latest["K"] < latest["D"] and latest["K"] > 65:
                             signals.append(("sell", "🔴 KD 高檔死亡交叉 (超買回檔訊號)"))
                     
-                    # 均線多空
                     if curr_price > latest["MA20"] and prev_price <= prev["MA20"]:
                         signals.append(("buy", "🟢 站上 20 日月線 (短多突破)"))
                     elif curr_price < latest["MA20"] and prev_price >= prev["MA20"]:
@@ -466,6 +457,14 @@ if search_query:
                     """)
                     
                 with col_chart:
+                    # 💡 直接將副圖選擇切換移至 K 線圖正上方 (橫向膠囊排版，側邊欄收縮也不受影響)
+                    sub_indicator = st.radio(
+                        "📊 切換下方副圖指標：",
+                        options=["Volume (成交量)", "MACD (指數平滑異同)", "KD (隨機指標 14,3)", "RSI (相對強弱 14)"],
+                        index=0,
+                        horizontal=True
+                    )
+                    
                     # 繪製主副圖
                     fig = make_subplots(
                         rows=2, cols=1,
@@ -490,7 +489,7 @@ if search_query:
                     fig.add_trace(go.Scatter(x=df.index, y=df['MA20'], name='20MA(月線)', line=dict(color='#58a6ff', width=1.6)), row=1, col=1)
                     fig.add_trace(go.Scatter(x=df.index, y=df['MA60'], name='60MA(季線)', line=dict(color='#bc8cff', width=1.8)), row=1, col=1)
                     
-                    # 支撐與壓力線 (高清晰置中標籤 + 背景色塊框，不再被右側遮擋)
+                    # 支撐與壓力線 (高清晰置左標籤 + 背景色塊框)
                     fig.add_hline(
                         y=res1, line_dash="dash", line_color="#f85149", line_width=2,
                         annotation_text=f" 🚨 壓力位 ${res1} ",
@@ -510,25 +509,24 @@ if search_query:
                         row=1, col=1
                     )
                     
-                    # 副圖動態切換 (MACD, KD, RSI, Volume)
-                    if "MACD" in sub_indicator:
+                    # 副圖動態切換
+                    if "Volume" in sub_indicator:
+                        vol_colors = ['#f85149' if df['Close'].iloc[i] >= df['Open'].iloc[i] else '#3fb950' for i in range(len(df))]
+                        fig.add_trace(go.Bar(x=df.index, y=df['Volume'], name='成交量', marker_color=vol_colors), row=2, col=1)
+                    elif "MACD" in sub_indicator:
                         fig.add_trace(go.Scatter(x=df.index, y=df['MACD_DIF'], name='DIF快線', line=dict(color='#58a6ff', width=1.4)), row=2, col=1)
                         fig.add_trace(go.Scatter(x=df.index, y=df['MACD_DEM'], name='MACD慢線', line=dict(color='#d29922', width=1.4)), row=2, col=1)
-                        # OSC 柱狀體 (紅漲綠跌)
                         colors = ['#f85149' if val >= 0 else '#3fb950' for val in df['MACD_OSC']]
                         fig.add_trace(go.Bar(x=df.index, y=df['MACD_OSC'], name='OSC柱狀體', marker_color=colors), row=2, col=1)
                     elif "KD" in sub_indicator:
-                        fig.add_trace(go.Scatter(x=df.index, y=df['K'], name='K值 (9,3)', line=dict(color='#f85149', width=1.5)), row=2, col=1)
-                        fig.add_trace(go.Scatter(x=df.index, y=df['D'], name='D值 (9,3)', line=dict(color='#3fb950', width=1.5)), row=2, col=1)
+                        fig.add_trace(go.Scatter(x=df.index, y=df['K'], name='K值 (14,3)', line=dict(color='#f85149', width=1.5)), row=2, col=1)
+                        fig.add_trace(go.Scatter(x=df.index, y=df['D'], name='D值 (14,3)', line=dict(color='#3fb950', width=1.5)), row=2, col=1)
                         fig.add_hline(y=80, line_dash="dot", line_color="#f85149", row=2, col=1)
                         fig.add_hline(y=20, line_dash="dot", line_color="#3fb950", row=2, col=1)
                     elif "RSI" in sub_indicator:
                         fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], name='RSI (14)', line=dict(color='#f778ba', width=1.5)), row=2, col=1)
                         fig.add_hline(y=70, line_dash="dot", line_color="#f85149", row=2, col=1)
                         fig.add_hline(y=30, line_dash="dot", line_color="#3fb950", row=2, col=1)
-                    elif "Volume" in sub_indicator:
-                        vol_colors = ['#f85149' if df['Close'].iloc[i] >= df['Open'].iloc[i] else '#3fb950' for i in range(len(df))]
-                        fig.add_trace(go.Bar(x=df.index, y=df['Volume'], name='成交量', marker_color=vol_colors), row=2, col=1)
                         
                     fig.update_layout(
                         paper_bgcolor='#0e1117',
