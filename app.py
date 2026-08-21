@@ -434,18 +434,21 @@ if search_query:
             ma20 = float(latest["MA20"]) if not np.isnan(latest["MA20"]) else curr_price
             ma60 = float(latest["MA60"]) if not np.isnan(latest["MA60"]) else curr_price
             
-            # --- 短・中・長線 關鍵價位演算法 ---
-            # 1. 短線 (1~2週)：5日線防守，目標前波近期小高點 (+5%)
+            # --- 關鍵價位全面定義 ---
+            res1 = round(min(recent_high, curr_price * 1.05), 1)
+            res2 = round(recent_high, 1)
+            sup1 = round(max(ma20, curr_price * 0.96), 1)
+            sup2 = round(min(ma60, recent_low), 1)
+            
+            # 短・中・長線 關鍵目標與停損防守
             short_buy_low = round(min(ma5, curr_price * 0.98), 1)
             short_buy_high = round(curr_price, 1)
             short_target = round(curr_price * 1.05, 1)
             short_stop = round(min(ma5 * 0.98, curr_price * 0.95), 1)
             
-            # 2. 中線波段 (1~3個月)：月線支撐防守，目標波段壓力高點 (+10%~+15%)
             mid_target = round(max(recent_high, curr_price * 1.10), 1)
             mid_stop = round(curr_price * 0.92, 1)
             
-            # 3. 長線價值 (半年~1年)：季線或估值目標 (+20%~+30%)
             long_target = round(max(recent_high * 1.15, curr_price * 1.25), 1)
             long_stop = round(min(ma60 * 0.95, curr_price * 0.85), 1)
             
@@ -456,9 +459,7 @@ if search_query:
             </div>
             """, unsafe_allow_html=True)
             
-            # -------------------------------------------------------------
-            # 【全新升級】短・中・長線完整量化點位推薦看板
-            # -------------------------------------------------------------
+            # 點位推薦區
             st.markdown("### 🎯 短・中・長線量化進出場點位推薦")
             b1, b2, b3, b4 = st.columns(4)
             
@@ -517,7 +518,7 @@ if search_query:
                     c_macd = latest["MACD_OSC"] > 0
                     c_kd = (latest["K"] > latest["D"]) and (latest["K"] < 75)
                     c_rsi_safe = latest["RSI"] < 70
-                    c_near_sup = curr_price <= (ma20 * 1.03)
+                    c_near_sup = curr_price <= (sup1 * 1.03)
                     
                     entry_points = sum([c_ma, c_macd, c_kd, c_rsi_safe])
                     
@@ -528,7 +529,7 @@ if search_query:
                     elif c_near_sup and c_ma:
                         d_class = "decision-batch-buy"
                         d_title = "🔵 【可分批入手】回測支撐有守"
-                        d_desc = f"股價回測月線/支撐區 (${ma20:.1f})，盈虧比極佳，建議採分批掛單建倉策略。"
+                        d_desc = f"股價回測月線/支撐區 (${sup1:.1f})，盈虧比極佳，建議採分批掛單建倉策略。"
                     elif latest["RSI"] >= 70:
                         d_class = "decision-wait"
                         d_title = "🟠 【暫緩入手】短線指標過熱 (防拉回)"
@@ -540,7 +541,7 @@ if search_query:
                     else:
                         d_class = "decision-wait"
                         d_title = "🟡 【建議觀望】等待方向明朗"
-                        d_desc = f"處於 ${ma20:.1f} ~ ${res1:.1f} 區間盤整，等待帶量突破壓力位後再順勢進場。"
+                        d_desc = f"處於 ${sup1:.1f} ~ ${res1:.1f} 區間盤整，等待帶量突破壓力位後再順勢進場。"
                         
                     st.markdown(f"""
                     <div class="{d_class}">
@@ -600,10 +601,9 @@ if search_query:
                     fig.add_trace(go.Scatter(x=df.index, y=df['MA20'], name='20MA(月線)', line=dict(color='#58a6ff', width=1.6)), row=1, col=1)
                     fig.add_trace(go.Scatter(x=df.index, y=df['MA60'], name='60MA(季線)', line=dict(color='#bc8cff', width=1.8)), row=1, col=1)
                     
-                    # 標註中線壓力與短線支撐
                     fig.add_hline(
                         y=res1, line_dash="dash", line_color="#f85149", line_width=2,
-                        annotation_text=f" 🚨 波段壓力 ${res1} ",
+                        annotation_text=f" 🚨 壓力位 ${res1} ",
                         annotation_position="top left",
                         annotation_font_size=13,
                         annotation_font_color="#ffffff",
@@ -612,7 +612,7 @@ if search_query:
                     )
                     fig.add_hline(
                         y=sup1, line_dash="dash", line_color="#3fb950", line_width=2,
-                        annotation_text=f" 🛡️ 月線支撐 ${sup1} ",
+                        annotation_text=f" 🛡️ 支撐位 ${sup1} ",
                         annotation_position="bottom left",
                         annotation_font_size=13,
                         annotation_font_color="#ffffff",
