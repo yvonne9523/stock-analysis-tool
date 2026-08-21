@@ -8,10 +8,10 @@ import requests
 import datetime
 
 # -----------------------------------------------------------------------------
-# 頁面配置與深色高質感交易終端 CSS
+# 頁面配置與高質感交易終端 CSS
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="三竹風格 AI 股票智能搜尋與量化分析終端",
+    page_title="三竹風格 AI 股票智能量化分析終端",
     page_icon="💹",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -21,7 +21,6 @@ st.markdown("""
 <style>
     .block-container { padding-top: 1.5rem; padding-bottom: 2rem; }
     
-    /* 核心卡片容器 */
     .card-box {
         background: #161b22;
         border: 1px solid #30363d;
@@ -30,7 +29,6 @@ st.markdown("""
         margin-bottom: 15px;
     }
     
-    /* 價格目標三竹專用標籤 */
     .target-box {
         background: #0d1117;
         border: 1px solid #21262d;
@@ -44,7 +42,6 @@ st.markdown("""
     .target-val-stop { font-size: 1.45rem; font-weight: 700; color: #e3b341; }
     .target-desc { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     
-    /* 買賣訊號盒 */
     .signal-buy {
         background-color: rgba(248, 81, 73, 0.15);
         border-left: 4px solid #f85149;
@@ -75,52 +72,109 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 股票字典庫與模糊搜尋引擎 (台股全市場常用清單 + 熱門美股)
+# 台美股名稱代碼自動轉換字典 (全市場熱門中英代碼)
 # -----------------------------------------------------------------------------
-STOCK_DATABASE = [
-    # 台股熱門權值與 ETF
-    {"code": "2330", "name": "台積電", "market": "TW"},
-    {"code": "2317", "name": "鴻海", "market": "TW"},
-    {"code": "2454", "name": "聯發科", "market": "TW"},
-    {"code": "2308", "name": "台達電", "market": "TW"},
-    {"code": "2382", "name": "廣達", "market": "TW"},
-    {"code": "2603", "name": "長榮", "market": "TW"},
-    {"code": "2609", "name": "陽明", "market": "TW"},
-    {"code": "2615", "name": "萬海", "market": "TW"},
-    {"code": "3231", "name": "緯創", "market": "TW"},
-    {"code": "2357", "name": "華碩", "market": "TW"},
-    {"code": "2376", "name": "技嘉", "market": "TW"},
-    {"code": "6669", "name": "緯穎", "market": "TW"},
-    {"code": "3008", "name": "大立光", "market": "TW"},
-    {"code": "2412", "name": "中華電", "market": "TW"},
-    {"code": "2881", "name": "富邦金", "market": "TW"},
-    {"code": "2882", "name": "國泰金", "market": "TW"},
-    {"code": "2891", "name": "中信金", "market": "TW"},
-    {"code": "2884", "name": "玉山金", "market": "TW"},
-    {"code": "2886", "name": "兆豐金", "market": "TW"},
-    {"code": "0050", "name": "元大台灣50", "market": "TW"},
-    {"code": "0056", "name": "元大高股息", "market": "TW"},
-    {"code": "00878", "name": "國泰永續高股息", "market": "TW"},
-    {"code": "00919", "name": "群益台灣精選高息", "market": "TW"},
-    {"code": "00929", "name": "復華台灣科技優息", "market": "TW"},
-    {"code": "00940", "name": "元大台灣價值高息", "market": "TW"},
-    # 美股熱門科技與指數
-    {"code": "NVDA", "name": "輝達 (NVIDIA)", "market": "US"},
-    {"code": "TSLA", "name": "特斯拉 (Tesla)", "market": "US"},
-    {"code": "AAPL", "name": "蘋果 (Apple)", "market": "US"},
-    {"code": "MSFT", "name": "微軟 (Microsoft)", "market": "US"},
-    {"code": "GOOGL", "name": "谷歌 (Alphabet)", "market": "US"},
-    {"code": "AMZN", "name": "亞馬遜 (Amazon)", "market": "US"},
-    {"code": "META", "name": "臉書 (Meta)", "market": "US"},
-    {"code": "AMD", "name": "超微 (AMD)", "market": "US"},
-    {"code": "AVGO", "name": "博通 (Broadcom)", "market": "US"},
-    {"code": "TSM", "name": "台積電ADR", "market": "US"},
-    {"code": "QQQ", "name": "那斯達克100 ETF", "market": "US"},
-    {"code": "SPY", "name": "標普500 ETF", "market": "US"},
-]
+COMMON_STOCK_MAP = {
+    # 台股半導體與電子
+    "台積電": "2330", "TSMC": "2330", "2330": "2330",
+    "華邦電": "2344", "2344": "2344",
+    "聯發科": "2454", "2454": "2454",
+    "鴻海": "2317", "2317": "2317",
+    "聯電": "2303", "2303": "2303",
+    "台達電": "2308", "2308": "2308",
+    "廣達": "2382", "2382": "2382",
+    "緯創": "3231", "3231": "3231",
+    "技嘉": "2376", "2376": "2376",
+    "華碩": "2357", "2357": "2357",
+    "微星": "2377", "2377": "2377",
+    "大立光": "3008", "3008": "3008",
+    "日月光": "3711", "日月光投控": "3711", "3711": "3711",
+    "南亞科": "2408", "2408": "2408",
+    "旺宏": "2337", "2337": "2337",
+    "力積電": "6770", "6770": "6770",
+    "世界先進": "5347", "5347": "5347",
+    "欣興": "3037", "3037": "3037",
+    "南電": "8046", "8046": "8046",
+    "景碩": "3189", "3189": "3189",
+    "世芯": "3661", "世芯-KY": "3661", "3661": "3661",
+    "創意": "3443", "3443": "3443",
+    "智原": "3035", "3035": "3035",
+    "祥碩": "5269", "5269": "5269",
+    "群聯": "8299", "8299": "8299",
+    "國巨": "2327", "2327": "2327",
+    "光寶科": "2301", "2301": "2301",
+    "英業達": "2356", "2356": "2356",
+    "和碩": "4938", "4938": "4938",
+    "仁寶": "2324", "2324": "2324",
+    "宏碁": "2353", "2353": "2353",
+    
+    # 航運與傳產
+    "長榮": "2603", "2603": "2603",
+    "陽明": "2609", "2609": "2609",
+    "萬海": "2615", "2615": "2615",
+    "長榮航": "2618", "2618": "2618",
+    "華航": "2610", "中華航空": "2610", "2610": "2610",
+    "中鋼": "2002", "2002": "2002",
+    "台塑": "1301", "1301": "1301",
+    "南亞": "1303", "1303": "1303",
+    "台化": "1326", "1326": "1326",
+    "台塑化": "6505", "6505": "6505",
+    
+    # 金融股
+    "富邦金": "2881", "2881": "2881",
+    "國泰金": "2882", "2882": "2882",
+    "中信金": "2891", "2891": "2891",
+    "玉山金": "2884", "2884": "2884",
+    "兆豐金": "2886", "2886": "2886",
+    "第一金": "2892", "2892": "2892",
+    "合庫金": "5880", "5880": "5880",
+    "華南金": "2880", "2880": "2880",
+    "台新金": "2887", "2887": "2887",
+    "永豐金": "2890", "2890": "2890",
+    "開發金": "2883", "凱基金": "2883", "2883": "2883",
+    "元大金": "2885", "2885": "2885",
+    
+    # 熱門 ETF
+    "0050": "0050", "元大台灣50": "0050", "台灣50": "0050",
+    "0056": "0056", "元大高股息": "0056", "高股息": "0056",
+    "00878": "00878", "國泰永續高股息": "00878",
+    "00919": "00919", "群益台灣精選高息": "00919",
+    "00929": "00929", "復華台灣科技優息": "00929",
+    "00940": "00940", "元大台灣價值高息": "00940",
+    "006208": "006208", "富邦台50": "006208",
+    
+    # 美股熱門標的
+    "輝達": "NVDA", "NVIDIA": "NVDA", "NVDA": "NVDA",
+    "特斯拉": "TSLA", "TESLA": "TSLA", "TSLA": "TSLA",
+    "蘋果": "AAPL", "APPLE": "AAPL", "AAPL": "AAPL",
+    "微軟": "MSFT", "MICROSOFT": "MSFT", "MSFT": "MSFT",
+    "谷歌": "GOOGL", "GOOGLE": "GOOGL", "ALPHABET": "GOOGL", "GOOGL": "GOOGL", "GOOG": "GOOG",
+    "亞馬遜": "AMZN", "AMAZON": "AMZN", "AMZN": "AMZN",
+    "臉書": "META", "META": "META",
+    "超微": "AMD", "AMD": "AMD",
+    "博通": "AVGO", "BROADCOM": "AVGO", "AVGO": "AVGO",
+    "台積電ADR": "TSM", "TSM": "TSM",
+    "那斯達克": "QQQ", "QQQ": "QQQ",
+    "標普500": "SPY", "SPY": "SPY"
+}
 
-# 格式化為選單標籤
-STOCK_OPTIONS = [f"{item['code']} - {item['name']}" for item in STOCK_DATABASE]
+def resolve_stock_code(query_text):
+    """將使用者輸入的中文、英文或代碼，智慧轉譯為標準股票代碼"""
+    cleaned = query_text.strip().upper().replace(".TW", "").replace(".TWO", "")
+    
+    # 1. 直接比對自建對照表
+    if cleaned in COMMON_STOCK_MAP:
+        return COMMON_STOCK_MAP[cleaned], query_text.strip()
+    for name, code in COMMON_STOCK_MAP.items():
+        if name in query_text or query_text in name:
+            return code, name
+            
+    # 2. 若為純數字代碼 (如 2344, 2330)
+    if cleaned.isdigit():
+        return cleaned, f"台股 {cleaned}"
+        
+    # 3. 預設返回原始輸入（當作美股代號）
+    return cleaned, cleaned
 
 # -----------------------------------------------------------------------------
 # 資料載入引擎
@@ -156,9 +210,7 @@ def get_tw_stock_data(stock_id, days=240):
 
 @st.cache_data(ttl=300, show_spinner=False)
 def load_market_data(ticker_str, period_str):
-    clean_ticker = ticker_str.strip().upper()
-    is_tw = clean_ticker.endswith(".TW") or clean_ticker.isdigit()
-    raw_code = clean_ticker.replace(".TW", "").replace(".TWO", "") if is_tw else clean_ticker
+    raw_code, display_name = resolve_stock_code(ticker_str)
     
     days_map = {"3mo": 120, "6mo": 200, "1y": 380, "2y": 750}
     target_days = days_map.get(period_str, 200)
@@ -166,38 +218,33 @@ def load_market_data(ticker_str, period_str):
     df = pd.DataFrame()
     info = {}
     
-    # 比對字典中名稱
-    matched_name = raw_code
-    for item in STOCK_DATABASE:
-        if item["code"].upper() == raw_code:
-            matched_name = f"{item['name']} ({item['code']})"
-            break
-            
-    if is_tw and raw_code.isdigit():
+    # 若為台股純數字
+    if raw_code.isdigit():
         df = get_tw_stock_data(raw_code, days=target_days)
         info = {
-            "longName": matched_name,
+            "longName": display_name,
             "sector": "台灣上市公司",
             "currency": "TWD",
             "trailingPE": 18.5,
-            "returnOnEquity": 0.21,
-            "marketCap": 25000000000000 if raw_code == "2330" else None
+            "returnOnEquity": 0.18,
+            "marketCap": None
         }
         
+    # 若非台股或台股接口異常，使用 yfinance 作為備援
     if df.empty:
         try:
-            yf_code = f"{raw_code}.TW" if is_tw else raw_code
+            yf_code = f"{raw_code}.TW" if raw_code.isdigit() else raw_code
             t = yf.Ticker(yf_code)
             df = t.history(period=period_str)
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = df.columns.get_level_values(0)
             info = t.info
             if not info.get("longName"):
-                info["longName"] = matched_name
+                info["longName"] = display_name
         except Exception:
             pass
             
-    return df, info, raw_code
+    return df, info, raw_code, display_name
 
 def compute_indicators(df):
     if df.empty or len(df) < 5:
@@ -242,32 +289,18 @@ def compute_indicators(df):
     return df
 
 # -----------------------------------------------------------------------------
-# 側邊欄：支援中文名稱、代號模糊搜尋與快速選單
+# 側邊欄：支援全中英文智慧搜尋
 # -----------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("### 🔍 智慧股票搜尋")
     
-    # 模糊搜尋選單（支援輸入「台積電」、「聯發科」、「NVDA」或「2330」）
-    selected_stock = st.selectbox(
-        "搜尋股票 (可直接打中文名稱或代碼)",
-        options=STOCK_OPTIONS,
-        index=0,
-        help="支援模糊輸入！例如打「長榮」、「鴻海」、「0050」、「輝達」、「AAPL」等"
-    )
-    
-    # 支援手動任意輸入其他未在預設列表中的股票
-    custom_stock = st.text_input(
-        "或手動輸入其他股票代碼 (選填)",
-        value="",
-        placeholder="例如: 2618 或 TSM"
+    search_query = st.text_input(
+        "輸入股票名稱或代碼",
+        value="華邦電",
+        placeholder="例如: 華邦電、長榮、2330、NVDA",
+        help="支援直接打中文 (如: 華邦電, 台積電, 鴻海) 或 代號 (如: 2344, 2330, AAPL)"
     ).strip()
     
-    # 決定最終要分析的代號
-    if custom_stock:
-        target_code = custom_stock
-    else:
-        target_code = selected_stock.split(" - ")[0].strip()
-        
     period_option = st.selectbox(
         "週期長度",
         options=["3mo", "6mo", "1y", "2y"],
@@ -276,19 +309,19 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("💡 **模糊搜尋提示**：在下拉框直接打中文或數字，選單會即時自動過濾比對！")
-    btn_refresh = st.button("🔄 立即重新整理", use_container_width=True)
+    st.caption("✨ **全中文代碼智能解析已啟用**：可直接輸入「華邦電」、「台積電」、「長榮」、「輝達」等名稱！")
+    btn_refresh = st.button("🚀 開始分析 / 重新整理", use_container_width=True)
 
 # -----------------------------------------------------------------------------
 # 主畫面核心計算與展示
 # -----------------------------------------------------------------------------
-if target_code:
-    with st.spinner(f"正在運算 {target_code} 三竹買賣點與未來走勢..."):
-        df, info, clean_code = load_market_data(target_code, period_option)
+if search_query:
+    with st.spinner(f"正在搜尋並解析「{search_query}」即時報價與買賣點..."):
+        df, info, clean_code, display_name = load_market_data(search_query, period_option)
         
         if df is None or df.empty or len(df) < 5:
-            st.error(f"❌ 查無代碼 `{target_code}` 的價格資訊。")
-            st.info("💡 請確認代碼是否正確（台股請輸入數字代碼如 `2330`，美股如 `NVDA`）。")
+            st.error(f"❌ 查無「{search_query}」的價格資訊。")
+            st.info("💡 請確認名稱或代號是否正確（例如輸入 `華邦電`、`2344` 或美股 `NVDA`）。")
         else:
             df = compute_indicators(df)
             latest = df.iloc[-1]
@@ -317,12 +350,10 @@ if target_code:
             target_sell_price = round(max(res1, curr_price * 1.08), 1)
             stop_loss_price = round(curr_price * 0.93, 1)
             
-            c_name = info.get("longName") or clean_code
-            
             # 頁首
             st.markdown(f"""
             <div style="margin-bottom: 15px;">
-                <h1 style="margin: 0; font-size: 2.1rem; color: #f0f6fc;">{c_name}</h1>
+                <h1 style="margin: 0; font-size: 2.1rem; color: #f0f6fc;">{display_name} <span style="font-size: 1.2rem; color: #58a6ff;">({clean_code})</span></h1>
                 <span style="color: #8b949e; font-size: 0.9rem;">更新日期：{latest.name.strftime('%Y-%m-%d')} ｜ 現價：<b style="color:{'#f85149' if diff>=0 else '#3fb950'}; font-size: 1.1rem;">${curr_price:,.2f}</b> ({diff:+,.2f}, {pct:+.2f}%)</span>
             </div>
             """, unsafe_allow_html=True)
