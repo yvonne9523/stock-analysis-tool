@@ -11,7 +11,7 @@ import datetime
 # 頁面配置與高質感深色 CSS
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="三竹專業 AI 全球股票與大盤量化終端",
+    page_title="全球股市小工具 - AI 股票與大盤量化分析終端",
     page_icon="🌐",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -19,7 +19,6 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* 增加頂部間距，徹底解決標題被上方工具列切斷的問題 */
     .block-container { 
         padding-top: 3.2rem !important; 
         padding-bottom: 2rem; 
@@ -186,7 +185,7 @@ def resolve_by_market(market_type, query_text):
                 return code, f"{name} (美股)"
         return cleaned, f"{cleaned} (美股)"
         
-    else: # 指數大盤
+    else:
         if query_text.strip() in INDEX_KNOWN_MAP:
             return INDEX_KNOWN_MAP[query_text.strip()], query_text.strip()
         if cleaned in INDEX_KNOWN_MAP:
@@ -256,7 +255,6 @@ def load_market_data_routed(market_type, ticker_str, period_str):
     df = pd.DataFrame()
     fund_info = {}
     
-    # 台股模式優先走開源與 TWSE 接口
     if "台灣" in market_type and raw_code.isdigit():
         df = get_tw_stock_kline(raw_code, days=target_days)
         fund_info = fetch_twse_live_fundamentals(raw_code)
@@ -265,7 +263,6 @@ def load_market_data_routed(market_type, ticker_str, period_str):
             fund_info["trailingEps"] = round(curr_p / fund_info["trailingPE"], 2)
         fund_info["longName"] = display_name
         
-    # 美股 / 指數 / 備援模式
     if df.empty or fund_info.get("trailingPE") is None:
         try:
             yf_code = f"{raw_code}.TW" if ("台灣" in market_type and raw_code.isdigit()) else raw_code
@@ -354,7 +351,7 @@ def compute_all_indicators(df):
     return df
 
 # -----------------------------------------------------------------------------
-# 頂部大盤走勢看板 (加權指數 / 那斯達克 / 標普500 / 費半)
+# 頂部大盤走勢看板
 # -----------------------------------------------------------------------------
 st.markdown("### 🌐 全球核心大盤即時行情")
 market_indices = fetch_global_indices()
@@ -376,10 +373,10 @@ if market_indices:
 st.markdown("<hr style='border-color: #21262d; margin-top: 5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 側邊欄 (新增市場分類下拉選單)
+# 側邊欄：全球股市小工具
 # -----------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("### 🔍 智慧股票終端")
+    st.markdown("### 🌐 全球股市小工具")
     
     market_select = st.selectbox(
         "選擇市場別",
@@ -387,7 +384,6 @@ with st.sidebar:
         index=0
     )
     
-    # 依市場別給予合適的預設搜尋範例
     default_ph = "例如: 台積電、鴻海、2330、0050" if "台灣" in market_select else "例如: NVDA、TSLA、AAPL、台積電" if "美國" in market_select else "例如: 加權指數、那斯達克、標普500"
     default_val = "台積電" if "台灣" in market_select else "NVDA" if "美國" in market_select else "加權指數"
     
@@ -405,7 +401,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("🧭 **已切換專屬市場引擎**：台股精準對應 2330，美股對應美股代碼！")
+    st.caption("✨ **全球股市量化分析**：台股精準對應 2330，美股即時行情同步！")
     btn_refresh = st.button("🚀 重新載入", use_container_width=True)
 
 # -----------------------------------------------------------------------------
@@ -455,7 +451,7 @@ if search_query:
             """, unsafe_allow_html=True)
             
             # 點位推薦區
-            st.markdown("### 🎯 三竹量化進出場點位推薦")
+            st.markdown("### 🎯 量化進出場點位推薦")
             b1, b2, b3, b4 = st.columns(4)
             
             with b1:
