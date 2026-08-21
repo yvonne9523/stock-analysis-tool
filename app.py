@@ -11,15 +11,15 @@ import datetime
 # 頁面配置與高質感深色 CSS
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="三竹專業 AI 股票量化終端",
-    page_icon="💹",
+    page_title="三竹專業 AI 全球股票與大盤量化終端",
+    page_icon="🌐",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 st.markdown("""
 <style>
-    .block-container { padding-top: 1.5rem; padding-bottom: 2rem; }
+    .block-container { padding-top: 1.2rem; padding-bottom: 2rem; }
     .card-box {
         background: #161b22;
         border: 1px solid #30363d;
@@ -40,7 +40,6 @@ st.markdown("""
     .target-val-stop { font-size: 1.45rem; font-weight: 700; color: #e3b341; }
     .target-desc { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     
-    /* 核心入手決策卡片 */
     .decision-strong-buy {
         background: linear-gradient(145deg, rgba(248, 81, 73, 0.25), rgba(248, 81, 73, 0.08));
         border: 2px solid #f85149;
@@ -79,56 +78,95 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 台美股代碼字典
+# 全球市場代碼解析引擎 (台股全市場 + 美股 / 日股 / 港股 / ETF / 大盤指數)
 # -----------------------------------------------------------------------------
-COMMON_STOCK_MAP = {
-    "台積電": "2330", "TSMC": "2330", "2330": "2330",
-    "華邦電": "2344", "2344": "2344",
-    "聯發科": "2454", "2454": "2454",
-    "鴻海": "2317", "2317": "2317",
-    "聯電": "2303", "2303": "2303",
-    "台達電": "2308", "2308": "2308",
-    "廣達": "2382", "2382": "2382",
-    "緯創": "3231", "3231": "3231",
-    "技嘉": "2376", "2376": "2376",
-    "華碩": "2357", "2357": "2357",
-    "長榮": "2603", "2603": "2603",
-    "陽明": "2609", "2609": "2609",
-    "萬海": "2615", "2615": "2615",
-    "長榮航": "2618", "2618": "2618",
-    "富邦金": "2881", "2881": "2881",
-    "國泰金": "2882", "2882": "2882",
-    "0050": "0050", "元大台灣50": "0050",
-    "0056": "0056", "元大高股息": "0056",
-    "00878": "00878", "國泰永續高股息": "00878",
-    "輝達": "NVDA", "NVDA": "NVDA",
-    "特斯拉": "TSLA", "TSLA": "TSLA",
-    "蘋果": "AAPL", "AAPL": "AAPL",
-    "微軟": "MSFT", "MSFT": "MSFT"
+GLOBAL_KNOWN_MAP = {
+    # 大盤指數
+    "加權指數": "^TWII", "台股大盤": "^TWII", "大盤": "^TWII", "TAIEX": "^TWII",
+    "櫃買指數": "^TWOII", "櫃買": "^TWOII", "OTC": "^TWOII",
+    "道瓊指數": "^DJI", "道瓊": "^DJI", "DJI": "^DJI",
+    "標普500": "^GSPC", "S&P500": "^GSPC", "SPX": "^GSPC",
+    "那斯達克": "^IXIC", "NASDAQ": "^IXIC", "那指": "^IXIC",
+    "費城半導體": "^SOX", "費半": "^SOX", "SOX": "^SOX",
+    "日經225": "^N225", "日經": "^N225",
+    
+    # 常用美股巨頭
+    "輝達": "NVDA", "NVIDIA": "NVDA", "NVDA": "NVDA",
+    "特斯拉": "TSLA", "TESLA": "TSLA", "TSLA": "TSLA",
+    "蘋果": "AAPL", "APPLE": "AAPL", "AAPL": "AAPL",
+    "微軟": "MSFT", "MICROSOFT": "MSFT", "MSFT": "MSFT",
+    "谷歌": "GOOGL", "GOOGLE": "GOOGL", "GOOGL": "GOOGL",
+    "亞馬遜": "AMZN", "AMAZON": "AMZN", "AMZN": "AMZN",
+    "臉書": "META", "META": "META",
+    "超微": "AMD", "AMD": "AMD",
+    "博通": "AVGO", "AVGO": "AVGO",
+    "台積電ADR": "TSM", "TSM": "TSM",
+    "ARM": "ARM", "安謀": "ARM",
+    "PLTR": "PLTR", "帕蘭提爾": "PLTR",
+    "COIN": "COIN", "微策略": "MSTR", "MSTR": "MSTR",
+    "QQQ": "QQQ", "SPY": "SPY", "SOXX": "SOXX", "NVDA": "NVDA"
 }
 
-def resolve_stock_code(query_text):
+@st.cache_data(ttl=86400, show_spinner=False)
+def load_all_taiwan_stock_mapping():
+    mapping = {}
+    try:
+        url = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
+        res = requests.get(url, timeout=6).json()
+        for item in res:
+            code = item.get("Code", "").strip()
+            name = item.get("Name", "").strip()
+            if code and name:
+                mapping[name] = code
+                mapping[code] = code
+                mapping[f"{code} {name}"] = code
+    except Exception:
+        pass
+    return mapping
+
+def resolve_global_stock_code(query_text):
     cleaned = query_text.strip().upper().replace(".TW", "").replace(".TWO", "")
-    if cleaned in COMMON_STOCK_MAP:
-        return COMMON_STOCK_MAP[cleaned], query_text.strip()
-    for name, code in COMMON_STOCK_MAP.items():
+    
+    # 1. 優先比對全球大盤或知名外股字典
+    if query_text.strip() in GLOBAL_KNOWN_MAP:
+        return GLOBAL_KNOWN_MAP[query_text.strip()], query_text.strip()
+    if cleaned in GLOBAL_KNOWN_MAP:
+        return GLOBAL_KNOWN_MAP[cleaned], query_text.strip()
+    for name, code in GLOBAL_KNOWN_MAP.items():
         if name in query_text or query_text in name:
             return code, name
+            
+    # 2. 比對台股 2000+ 檔名冊
+    tw_map = load_all_taiwan_stock_mapping()
+    if cleaned in tw_map:
+        code = tw_map[cleaned]
+        name = query_text.strip()
+        for k, v in tw_map.items():
+            if v == code and not k.isdigit():
+                name = k
+                break
+        return code, name
+    for k, v in tw_map.items():
+        if cleaned in k or k in cleaned:
+            return v, k
+            
+    # 3. 若為純數字則為台股代碼
     if cleaned.isdigit():
         return cleaned, f"台股 {cleaned}"
+        
+    # 4. 其餘直接作為美股/外股代號 (如: AAPL, BABA, 7203.T 等)
     return cleaned, cleaned
 
 # -----------------------------------------------------------------------------
-# 資料獲取模組
+# 資料獲取模組 (支援台股 OpenAPI + 全球 yfinance 雙引擎)
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=600, show_spinner=False)
 def fetch_twse_live_fundamentals(stock_id):
     url = "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL"
     try:
-        res = requests.get(url, timeout=8)
+        res = requests.get(url, timeout=6)
         if res.status_code == 200:
-            data = res.json()
-            for item in data:
+            for item in res.json():
                 if item.get("Code") == stock_id:
                     pe_str = item.get("PEratio", "")
                     pb_str = item.get("PBratio", "")
@@ -138,10 +176,8 @@ def fetch_twse_live_fundamentals(stock_id):
                     yield_val = float(yield_str.replace(",", "")) if yield_str and yield_str != "-" else None
                     roe_val = (pb_val / pe_val) if (pb_val and pe_val and pe_val > 0) else None
                     return {
-                        "trailingPE": pe_val,
-                        "priceToBook": pb_val,
-                        "dividendYield": yield_val,
-                        "returnOnEquity": roe_val
+                        "trailingPE": pe_val, "priceToBook": pb_val,
+                        "dividendYield": yield_val, "returnOnEquity": roe_val
                     }
     except Exception:
         pass
@@ -158,58 +194,30 @@ def get_tw_stock_kline(stock_id, days=240):
         "end_date": end_date
     }
     try:
-        res = requests.get(url, params=params, timeout=10)
-        data = res.json()
-        if data.get("msg") == "success" and len(data.get("data", [])) > 0:
-            df = pd.DataFrame(data["data"])
+        res = requests.get(url, params=params, timeout=8).json()
+        if res.get("msg") == "success" and len(res.get("data", [])) > 0:
+            df = pd.DataFrame(res["data"])
             df["date"] = pd.to_datetime(df["date"])
             df.set_index("date", inplace=True)
             df.rename(columns={
-                "open": "Open",
-                "max": "High",
-                "min": "Low",
-                "close": "Close",
-                "Trading_Volume": "Volume"
+                "open": "Open", "max": "High", "min": "Low",
+                "close": "Close", "Trading_Volume": "Volume"
             }, inplace=True)
             return df[["Open", "High", "Low", "Close", "Volume"]]
     except Exception:
         pass
     return pd.DataFrame()
 
-@st.cache_data(ttl=600, show_spinner=False)
-def fetch_corporate_events(ticker_symbol):
-    events = []
-    try:
-        t = yf.Ticker(f"{ticker_symbol}.TW" if ticker_symbol.isdigit() else ticker_symbol)
-        cal = t.calendar
-        if cal is not None and not cal.empty:
-            for col in cal.columns:
-                events.append({"項目": "法說會/財報公布", "日期": str(cal[col].values[0])[:10], "備註": "官方預計發布日程"})
-        divs = t.dividends
-        if divs is not None and not divs.empty:
-            last_div_date = divs.index[-1].strftime("%Y-%m-%d")
-            last_div_val = divs.iloc[-1]
-            events.append({"項目": "除息交易日", "日期": last_div_date, "備註": f"配發現金股利 ${last_div_val:.2f}"})
-    except Exception:
-        pass
-        
-    if not events and ticker_symbol.isdigit():
-        events = [
-            {"項目": "常態除權息", "日期": "每年 6 ~ 8 月", "備註": "視董事會與除息公告訂定"},
-            {"項目": "年度股東常會", "日期": "每年 5 ~ 6 月", "備註": "通過股利分配與營運報告"},
-            {"項目": "季報與法說會", "日期": "每季中旬 (5/15, 8/14, 11/14)", "備註": "揭露最新財務報告與展望"}
-        ]
-    return events
-
 @st.cache_data(ttl=300, show_spinner=False)
-def load_market_data(ticker_str, period_str):
-    raw_code, display_name = resolve_stock_code(ticker_str)
+def load_global_market_data(ticker_str, period_str):
+    raw_code, display_name = resolve_global_stock_code(ticker_str)
     days_map = {"3mo": 120, "6mo": 200, "1y": 380, "2y": 750}
     target_days = days_map.get(period_str, 200)
     
     df = pd.DataFrame()
     fund_info = {}
     
+    # 1. 若為純數字台股
     if raw_code.isdigit():
         df = get_tw_stock_kline(raw_code, days=target_days)
         fund_info = fetch_twse_live_fundamentals(raw_code)
@@ -218,6 +226,7 @@ def load_market_data(ticker_str, period_str):
             fund_info["trailingEps"] = round(curr_p / fund_info["trailingPE"], 2)
         fund_info["longName"] = display_name
         
+    # 2. 若為美股/大盤指數/或台股備援
     if df.empty or fund_info.get("trailingPE") is None:
         try:
             yf_code = f"{raw_code}.TW" if raw_code.isdigit() else raw_code
@@ -235,8 +244,34 @@ def load_market_data(ticker_str, period_str):
         except Exception:
             pass
             
-    events = fetch_corporate_events(raw_code)
-    return df, fund_info, raw_code, display_name, events
+    return df, fund_info, raw_code, display_name
+
+# 抓取全球主要大盤即時資訊
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_global_indices():
+    indices = [
+        {"name": "台股加權指數", "ticker": "^TWII"},
+        {"name": "那斯達克 (美股科技)", "ticker": "^IXIC"},
+        {"name": "標普500 (美股大型)", "ticker": "^GSPC"},
+        {"name": "費城半導體", "ticker": "^SOX"},
+    ]
+    results = []
+    for item in indices:
+        try:
+            t = yf.Ticker(item["ticker"])
+            hist = t.history(period="5d")
+            if len(hist) >= 2:
+                curr = float(hist["Close"].iloc[-1])
+                prev = float(hist["Close"].iloc[-2])
+                diff = curr - prev
+                pct = (diff / prev) * 100
+                results.append({
+                    "name": item["name"], "price": curr,
+                    "diff": diff, "pct": pct, "ticker": item["ticker"]
+                })
+        except Exception:
+            pass
+    return results
 
 def compute_all_indicators(df):
     if df.empty or len(df) < 5:
@@ -264,13 +299,11 @@ def compute_all_indicators(df):
     k_prev, d_prev = 50.0, 50.0
     for val in rsv:
         if np.isnan(val):
-            k_list.append(np.nan)
-            d_list.append(np.nan)
+            k_list.append(np.nan); d_list.append(np.nan)
         else:
             k_curr = (2/3) * k_prev + (1/3) * val
             d_curr = (2/3) * d_prev + (1/3) * k_curr
-            k_list.append(k_curr)
-            d_list.append(d_curr)
+            k_list.append(k_curr); d_list.append(d_curr)
             k_prev, d_prev = k_curr, d_curr
     df["K"] = k_list
     df["D"] = d_list
@@ -280,18 +313,40 @@ def compute_all_indicators(df):
     df["MACD_DIF"] = ema12 - ema26
     df["MACD_DEM"] = df["MACD_DIF"].ewm(span=9, adjust=False).mean()
     df["MACD_OSC"] = df["MACD_DIF"] - df["MACD_DEM"]
-    
     return df
 
 # -----------------------------------------------------------------------------
-# 側邊欄
+# 頂部大盤走勢看板 (加權指數 / 那斯達克 / 標普500 / 費半)
+# -----------------------------------------------------------------------------
+st.markdown("### 🌐 全球核心大盤即時行情")
+market_indices = fetch_global_indices()
+
+if market_indices:
+    m_cols = st.columns(len(market_indices))
+    for i, idx in enumerate(market_indices):
+        d_color = "#f85149" if idx["diff"] >= 0 else "#3fb950"
+        arrow = "▲" if idx["diff"] >= 0 else "▼"
+        with m_cols[i]:
+            st.markdown(f"""
+            <div class="target-box" style="margin-bottom: 8px;">
+                <div style="font-size: 0.8rem; color: #8b949e;">{idx['name']}</div>
+                <div style="font-size: 1.3rem; font-weight: 700; color: #ffffff;">{idx['price']:,.2f}</div>
+                <div style="font-size: 0.8rem; color: {d_color}; font-weight: 600;">{arrow} {idx['diff']:+,.2f} ({idx['pct']:+.2f}%)</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+st.markdown("<hr style='border-color: #21262d; margin-top: 5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
+
+# -----------------------------------------------------------------------------
+# 側邊欄 (支援台股、美股、日股、ETF、大盤查詢)
 # -----------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("### 🔍 智慧股票終端")
+    st.markdown("### 🔍 全球股票 / 大盤搜尋")
     search_query = st.text_input(
-        "股票名稱 / 代碼",
-        value="華邦電",
-        placeholder="例如: 華邦電、長榮、2330、NVDA"
+        "股票名稱 / 代碼 / 指數",
+        value="台積電",
+        placeholder="例如: 台積電、NVDA、AAPL、加權指數",
+        help="支援全台股 (如: 台新金, 2330)、美股 (如: NVDA, TSLA, AAPL)、ETF (0050, QQQ) 或 大盤 (加權指數, 那斯達克)"
     ).strip()
     
     period_option = st.selectbox(
@@ -300,19 +355,20 @@ with st.sidebar:
         index=1,
         format_func=lambda x: {"3mo": "近 3 個月", "6mo": "近 6 個月", "1y": "近 1 年", "2y": "近 2 年"}.get(x, x)
     )
-    
     st.markdown("---")
+    st.caption("🌍 **全球市場已連線**：支援台股 2000+ 檔、美股全市場、美股七巨頭與全球大盤指數！")
     btn_refresh = st.button("🚀 重新載入", use_container_width=True)
 
 # -----------------------------------------------------------------------------
 # 主畫面呈現
 # -----------------------------------------------------------------------------
 if search_query:
-    with st.spinner(f"正在載入「{search_query}」圖表與決策診斷..."):
-        df, info, clean_code, display_name, events = load_market_data(search_query, period_option)
+    with st.spinner(f"正在連線全球市場終端，載入「{search_query}」..."):
+        df, info, clean_code, display_name = load_global_market_data(search_query, period_option)
         
         if df is None or df.empty or len(df) < 5:
             st.error(f"❌ 查無「{search_query}」的價格資訊。")
+            st.info("💡 請確認名稱或代號是否正確（例如輸入 `台新金`、`NVDA`、`AAPL` 或 `加權指數`）。")
         else:
             df = compute_all_indicators(df)
             latest = df.iloc[-1]
@@ -345,7 +401,7 @@ if search_query:
             st.markdown(f"""
             <div style="margin-bottom: 15px;">
                 <h1 style="margin: 0; font-size: 2.1rem; color: #f0f6fc;">{display_name} <span style="font-size: 1.2rem; color: #58a6ff;">({clean_code})</span></h1>
-                <span style="color: #8b949e; font-size: 0.9rem;">更新時間：<b>{now_time_str}</b> ｜ 現價：<b style="color:{'#f85149' if diff>=0 else '#3fb950'}; font-size: 1.1rem;">${curr_price:,.2f}</b> ({diff:+,.2f}, {pct:+.2f}%)</span>
+                <span style="color: #8b949e; font-size: 0.9rem;">更新時間：<b>{now_time_str}</b> ｜ 最新報價：<b style="color:{'#f85149' if diff>=0 else '#3fb950'}; font-size: 1.1rem;">${curr_price:,.2f}</b> ({diff:+,.2f}, {pct:+.2f}%)</span>
             </div>
             """, unsafe_allow_html=True)
             
@@ -392,15 +448,14 @@ if search_query:
                 
                 st.markdown(f"""
                 <div class="target-box" style="border-left: 4px solid {status_color};">
-                    <div class="target-title">🧭 三竹多空綜合診斷</div>
+                    <div class="target-title">🧭 多空綜合診斷評分</div>
                     <div style="font-size: 1.45rem; font-weight: 700; color: {status_color};">{status_text}</div>
                     <div class="target-desc">量化總評分：{score} / 4 分</div>
                 </div>
                 """, unsafe_allow_html=True)
 
-            tab1, tab2, tab3, tab4 = st.tabs([
+            tab1, tab2, tab3 = st.tabs([
                 "📊 支撐壓力 K 線與全指標",
-                "📅 除權息 / 股東會 / 重大行事曆",
                 "🔮 未來走勢情境預測",
                 "🏢 基本面真實財務評價"
             ])
@@ -480,7 +535,6 @@ if search_query:
                         horizontal=True
                     )
                     
-                    # 移除 subplot_titles 的主圖標題文字，避免擋住頂部均線圖例
                     fig = make_subplots(
                         rows=2, cols=1,
                         shared_xaxes=True,
@@ -556,35 +610,16 @@ if search_query:
                     fig.update_yaxes(gridcolor='#21262d', zeroline=False)
                     st.plotly_chart(fig, use_container_width=True)
 
-            # TAB 2: 除權息日程
+            # TAB 2: 未來情境預測
             with tab2:
-                st.markdown(f"#### 📅 {display_name} 重大公司事件與除權息日程表")
-                if events:
-                    event_df = pd.DataFrame(events)
-                    st.dataframe(event_df, use_container_width=True, hide_index=True)
-                else:
-                    st.info("目前無即將到來的重大除權息或法說會日程公告。")
-                    
-                st.markdown("""
-                <div class="card-box" style="margin-top:15px;">
-                    <h5 style="color:#58a6ff; margin-top:0;">💡 除權息交易小撇步</h5>
-                    <ul>
-                        <li><b>除息日前一日買進</b>：即可享有當期現金股利分配權利。</li>
-                        <li><b>填息觀察</b>：若基本面獲利強勁且處於多頭排列，除息後通常在數日至數週內完成填息。</li>
-                    </ul>
-                </div>
-                """, unsafe_allow_html=True)
-
-            # TAB 3: 未來情境預測
-            with tab3:
-                st.markdown("#### 🔮 該檔股票未來 1~3 個月趨勢預測與劇本拆解")
+                st.markdown("#### 🔮 該檔標的未來 1~3 個月趨勢預測與劇本拆解")
                 col_sc1, col_sc2, col_sc3 = st.columns(3)
                 
                 with col_sc1:
                     st.markdown(f"""
                     <div class="card-box" style="border-top: 3px solid #f85149;">
                         <h4 style="color: #f85149; margin-top: 0;">🚀 樂觀情境 (機率 45%)</h4>
-                        <p><b>觸發條件</b>：成交量溫和放大，股價帶量突破壓力位 <b>${res1}</b>。</p>
+                        <p><b>觸發條件</b>：成交量溫和放大，帶量突破壓力位 <b>${res1}</b>。</p>
                         <p><b>未來目標價</b>：有望向上挑戰波段高點 <b>${res2}</b> 或更高位階。</p>
                         <p style="color: #8b949e; font-size: 0.85rem;">操作：順勢持股續抱，沿 5 日線移動停利。</p>
                     </div>
@@ -594,7 +629,7 @@ if search_query:
                     st.markdown(f"""
                     <div class="card-box" style="border-top: 3px solid #e3b341;">
                         <h4 style="color: #e3b341; margin-top: 0;">⚖️ 中性格局 (機率 35%)</h4>
-                        <p><b>觸發條件</b>：量能平平，股價於 <b>${sup1} ~ ${res1}</b> 區間震盪。</p>
+                        <p><b>觸發條件</b>：量能平平，價格於 <b>${sup1} ~ ${res1}</b> 區間震盪。</p>
                         <p><b>未來走勢</b>：月線 (MA20) 持續走平，進行箱型時間換取空間整理。</p>
                         <p style="color: #8b949e; font-size: 0.85rem;">操作：逢低在箱底支撐附近買進，逢高調節不追高。</p>
                     </div>
@@ -604,14 +639,14 @@ if search_query:
                     st.markdown(f"""
                     <div class="card-box" style="border-top: 3px solid #3fb950;">
                         <h4 style="color: #3fb950; margin-top: 0;">⚠️ 悲觀修正 (機率 20%)</h4>
-                        <p><b>觸發條件</b>：跌破短期關鍵支撐 <b>${sup1}</b> 或大盤拉回。</p>
+                        <p><b>觸發條件</b>：跌破短期關鍵支撐 <b>${sup1}</b> 或總經利空回檔。</p>
                         <p><b>未來支撐價</b>：下測季線或前波低點 <b>${sup2}</b> 尋求支撐。</p>
                         <p style="color: #8b949e; font-size: 0.85rem;">操作：跌破停損價 <b>${stop_loss_price}</b> 時果斷減碼收回資金。</p>
                     </div>
                     """, unsafe_allow_html=True)
 
-            # TAB 4: 基本面
-            with tab4:
+            # TAB 3: 基本面
+            with tab3:
                 st.markdown("#### 🏢 即時真實財務指標與基本面評價")
                 f1, f2 = st.columns(2)
                 
@@ -621,16 +656,16 @@ if search_query:
                 eps_live = info.get("trailingEps")
                 roe_live = info.get("returnOnEquity")
                 
-                pe_text = f"{pe_live:.2f} 倍" if pe_live is not None and pe_live > 0 else "N/A (虧損或無資料)"
+                pe_text = f"{pe_live:.2f} 倍" if pe_live is not None and pe_live > 0 else "N/A (虧損或指數無資料)"
                 pb_text = f"{pb_live:.2f} 倍" if pb_live is not None else "N/A"
                 yield_text = f"{yield_live:.2f}%" if yield_live is not None else "無配息 / 無資料"
                 eps_text = f"${eps_live:.2f}" if eps_live is not None else "N/A"
                 roe_text = f"{roe_live*100:.2f}%" if roe_live is not None else "N/A"
                 
                 with f1:
-                    st.markdown("##### 📌 核心財務估值 (TWSE 官方數據)")
+                    st.markdown("##### 📌 核心財務估值數據")
                     f_df1 = pd.DataFrame({
-                        "指標名稱": ["本益比 (P/E)", "股價淨值比 (P/B)", "近四季推估 EPS", "現金殖利率", "推估 ROE"],
+                        "指標名稱": ["本益比 (P/E)", "股價淨值比 (P/B)", "每股盈餘 (EPS)", "現金殖利率", "股東權益報酬率 (ROE)"],
                         "數值": [pe_text, pb_text, eps_text, yield_text, roe_text]
                     })
                     st.dataframe(f_df1, use_container_width=True, hide_index=True)
@@ -640,21 +675,21 @@ if search_query:
                     
                     if roe_live is not None and roe_live >= 0.18:
                         star_rating = "⭐⭐⭐⭐⭐ (頂級藍籌股)"
-                        comment = f"該公司獲利能力極佳，ROE 達 **{roe_text}**，具備強大產業護城河，拉回至季線均為長線佈局優質標的。"
+                        comment = f"獲利能力極佳，ROE 達 **{roe_text}**，具備強大產業護城河，拉回至季線均為長線佈局優質標的。"
                     elif roe_live is not None and roe_live >= 0.10:
                         star_rating = "⭐⭐⭐⭐ (優質營運企業)"
-                        comment = f"公司獲利穩定，當前 ROE 為 **{roe_text}**，適合逢低分批定期定額佈局。"
+                        comment = f"營運體質穩定，當前 ROE 為 **{roe_text}**，適合逢低分批定期定額佈局。"
                     elif pe_live is not None and pe_live > 30:
                         star_rating = "⭐⭐⭐ (高成長/高估值題材股)"
                         comment = f"當前本益比 **{pe_text}** 處於較高水準，市場給予高成長溢價，建議順勢搭配技術面操作。"
                     else:
-                        star_rating = "⭐⭐⭐ (穩健型 / 景氣循環股)"
-                        comment = "受產業週期波動影響，建議逢低於支撐區間介入，嚴格設定停損點。"
+                        star_rating = "⭐⭐⭐ (穩健型 / 景氣循環股 / 大盤指數)"
+                        comment = "受總體經濟及產業週期波動影響，建議逢低於支撐區間介入，嚴格設定停損點。"
                         
                     st.markdown(f"""
                     <div class="card-box">
                         <p><b>長線存股評級</b>：{star_rating}</p>
                         <p><b>即時診斷</b>：{comment}</p>
-                        <p style="color: #8b949e; font-size: 0.85rem;"><b>資料來源</b>：台灣證券交易所 (TWSE) 每日盤後開放數據</p>
+                        <p style="color: #8b949e; font-size: 0.85rem;"><b>資料來源</b>：全球金融市場即時開放數據</p>
                     </div>
                     """, unsafe_allow_html=True)
