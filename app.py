@@ -35,14 +35,14 @@ st.markdown("""
         background: #0d1117;
         border: 1px solid #21262d;
         border-radius: 8px;
-        padding: 12px 16px;
+        padding: 12px 14px;
         margin-bottom: 10px;
     }
-    .target-title { font-size: 0.85rem; color: #8b949e; margin-bottom: 4px; }
-    .target-val-buy { font-size: 1.45rem; font-weight: 700; color: #f85149; }
-    .target-val-sell { font-size: 1.45rem; font-weight: 700; color: #3fb950; }
-    .target-val-stop { font-size: 1.45rem; font-weight: 700; color: #e3b341; }
-    .target-desc { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
+    .target-title { font-size: 0.8rem; color: #8b949e; margin-bottom: 4px; }
+    .target-val-buy { font-size: 1.35rem; font-weight: 700; color: #f85149; }
+    .target-val-sell { font-size: 1.35rem; font-weight: 700; color: #3fb950; }
+    .target-val-stop { font-size: 1.35rem; font-weight: 700; color: #e3b341; }
+    .target-desc { font-size: 0.75rem; color: #8b949e; margin-top: 4px; }
     
     .decision-strong-buy {
         background: linear-gradient(145deg, rgba(248, 81, 73, 0.25), rgba(248, 81, 73, 0.08));
@@ -452,6 +452,16 @@ if search_query:
             long_target = round(max(recent_high * 1.15, curr_price * 1.25), 1)
             long_stop = round(min(ma60 * 0.95, curr_price * 0.85), 1)
             
+            # 多空評分計算
+            score = 0
+            if curr_price > ma20: score += 1
+            if curr_price > ma60: score += 1
+            if latest["K"] > latest["D"]: score += 1
+            if 40 <= latest["RSI"] <= 65: score += 1
+            
+            status_text = "強烈偏多 (多方掌控)" if score >= 3 else "震盪整理 (多空拉鋸)" if score == 2 else "偏空修正 (觀望為宜)"
+            status_color = "#f85149" if score >= 3 else "#e3b341" if score == 2 else "#3fb950"
+            
             st.markdown(f"""
             <div style="margin-bottom: 15px;">
                 <h1 style="margin: 0; font-size: 2.1rem; color: #f0f6fc;">{display_name} <span style="font-size: 1.2rem; color: #58a6ff;">({clean_code})</span></h1>
@@ -459,43 +469,54 @@ if search_query:
             </div>
             """, unsafe_allow_html=True)
             
-            # 點位推薦區
+            # -------------------------------------------------------------
+            # 【完整 5 卡片呈現】買進區間 + 短中長目標 + 多空綜合診斷評分
+            # -------------------------------------------------------------
             st.markdown("### 🎯 短・中・長線量化進出場點位推薦")
-            b1, b2, b3, b4 = st.columns(4)
+            b1, b2, b3, b4, b5 = st.columns(5)
             
             with b1:
                 st.markdown(f"""
                 <div class="target-box" style="border-left: 4px solid #f85149;">
-                    <div class="target-title">💡 建議買進區間 (分批建倉)</div>
+                    <div class="target-title">💡 建議買進區間</div>
                     <div class="target-val-buy">${short_buy_low} ~ ${short_buy_high}</div>
-                    <div class="target-desc">回測 5MA / 月線支撐右側進場</div>
+                    <div class="target-desc">回測 5MA / 月線支撐進場</div>
                 </div>
                 """, unsafe_allow_html=True)
                 
             with b2:
                 st.markdown(f"""
                 <div class="target-box" style="border-left: 4px solid #3fb950;">
-                    <div class="target-title">⚡ 短線獲利目標 (1~2週)</div>
+                    <div class="target-title">⚡ 短線目標 (1~2週)</div>
                     <div class="target-val-sell">${short_target}</div>
-                    <div class="target-desc">預期空間 +{((short_target-curr_price)/curr_price)*100:.1f}% ｜ 停損 ${short_stop}</div>
+                    <div class="target-desc">預期 +{((short_target-curr_price)/curr_price)*100:.1f}% ｜ 停損 ${short_stop}</div>
                 </div>
                 """, unsafe_allow_html=True)
                 
             with b3:
                 st.markdown(f"""
                 <div class="target-box" style="border-left: 4px solid #38bdf8;">
-                    <div class="target-title">🌊 中線波段目標 (1~3個月)</div>
-                    <div style="font-size: 1.45rem; font-weight: 700; color: #38bdf8;">${mid_target}</div>
-                    <div class="target-desc">預期空間 +{((mid_target-curr_price)/curr_price)*100:.1f}% ｜ 停損 ${mid_stop}</div>
+                    <div class="target-title">🌊 中線波段 (1~3月)</div>
+                    <div style="font-size: 1.35rem; font-weight: 700; color: #38bdf8;">${mid_target}</div>
+                    <div class="target-desc">預期 +{((mid_target-curr_price)/curr_price)*100:.1f}% ｜ 停損 ${mid_stop}</div>
                 </div>
                 """, unsafe_allow_html=True)
                 
             with b4:
                 st.markdown(f"""
                 <div class="target-box" style="border-left: 4px solid #a855f7;">
-                    <div class="target-title">🏛️ 長線價值目標 (半年~1年)</div>
-                    <div style="font-size: 1.45rem; font-weight: 700; color: #c084fc;">${long_target}</div>
-                    <div class="target-desc">預期空間 +{((long_target-curr_price)/curr_price)*100:.1f}% ｜ 防守 ${long_stop}</div>
+                    <div class="target-title">🏛️ 長線價值 (半年~1年)</div>
+                    <div style="font-size: 1.35rem; font-weight: 700; color: #c084fc;">${long_target}</div>
+                    <div class="target-desc">預期 +{((long_target-curr_price)/curr_price)*100:.1f}% ｜ 防守 ${long_stop}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            with b5:
+                st.markdown(f"""
+                <div class="target-box" style="border-left: 4px solid {status_color};">
+                    <div class="target-title">🧭 多空綜合診斷</div>
+                    <div style="font-size: 1.25rem; font-weight: 700; color: {status_color}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{status_text}</div>
+                    <div class="target-desc">量化總評分：{score} / 4 分</div>
                 </div>
                 """, unsafe_allow_html=True)
 
