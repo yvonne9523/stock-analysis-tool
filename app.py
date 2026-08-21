@@ -430,18 +430,24 @@ if search_query:
             recent_high = float(recent_window["High"].max())
             recent_low = float(recent_window["Low"].min())
             
+            ma5 = float(latest["MA5"]) if not np.isnan(latest["MA5"]) else curr_price
             ma20 = float(latest["MA20"]) if not np.isnan(latest["MA20"]) else curr_price
             ma60 = float(latest["MA60"]) if not np.isnan(latest["MA60"]) else curr_price
             
-            res1 = round(min(recent_high, curr_price * 1.05), 1)
-            res2 = round(recent_high, 1)
-            sup1 = round(max(ma20, curr_price * 0.96), 1)
-            sup2 = round(min(ma60, recent_low), 1)
+            # --- 短・中・長線 關鍵價位演算法 ---
+            # 1. 短線 (1~2週)：5日線防守，目標前波近期小高點 (+5%)
+            short_buy_low = round(min(ma5, curr_price * 0.98), 1)
+            short_buy_high = round(curr_price, 1)
+            short_target = round(curr_price * 1.05, 1)
+            short_stop = round(min(ma5 * 0.98, curr_price * 0.95), 1)
             
-            suggested_buy_low = round(min(sup1, curr_price * 0.98), 1)
-            suggested_buy_high = round(curr_price, 1)
-            target_sell_price = round(max(res1, curr_price * 1.08), 1)
-            stop_loss_price = round(curr_price * 0.93, 1)
+            # 2. 中線波段 (1~3個月)：月線支撐防守，目標波段壓力高點 (+10%~+15%)
+            mid_target = round(max(recent_high, curr_price * 1.10), 1)
+            mid_stop = round(curr_price * 0.92, 1)
+            
+            # 3. 長線價值 (半年~1年)：季線或估值目標 (+20%~+30%)
+            long_target = round(max(recent_high * 1.15, curr_price * 1.25), 1)
+            long_stop = round(min(ma60 * 0.95, curr_price * 0.85), 1)
             
             st.markdown(f"""
             <div style="margin-bottom: 15px;">
@@ -450,52 +456,45 @@ if search_query:
             </div>
             """, unsafe_allow_html=True)
             
-            # 點位推薦區
-            st.markdown("### 🎯 量化進出場點位推薦")
+            # -------------------------------------------------------------
+            # 【全新升級】短・中・長線完整量化點位推薦看板
+            # -------------------------------------------------------------
+            st.markdown("### 🎯 短・中・長線量化進出場點位推薦")
             b1, b2, b3, b4 = st.columns(4)
             
             with b1:
                 st.markdown(f"""
                 <div class="target-box" style="border-left: 4px solid #f85149;">
                     <div class="target-title">💡 建議買進區間 (分批建倉)</div>
-                    <div class="target-val-buy">${suggested_buy_low} ~ ${suggested_buy_high}</div>
-                    <div class="target-desc">回測支撐位或現價右側轉折點</div>
+                    <div class="target-val-buy">${short_buy_low} ~ ${short_buy_high}</div>
+                    <div class="target-desc">回測 5MA / 月線支撐右側進場</div>
                 </div>
                 """, unsafe_allow_html=True)
                 
             with b2:
                 st.markdown(f"""
                 <div class="target-box" style="border-left: 4px solid #3fb950;">
-                    <div class="target-title">🎯 短波段獲利賣出目標</div>
-                    <div class="target-val-sell">${target_sell_price}</div>
-                    <div class="target-desc">前波壓力 / 預期空間 +{((target_sell_price-curr_price)/curr_price)*100:.1f}%</div>
+                    <div class="target-title">⚡ 短線獲利目標 (1~2週)</div>
+                    <div class="target-val-sell">${short_target}</div>
+                    <div class="target-desc">預期空間 +{((short_target-curr_price)/curr_price)*100:.1f}% ｜ 停損 ${short_stop}</div>
                 </div>
                 """, unsafe_allow_html=True)
                 
             with b3:
                 st.markdown(f"""
-                <div class="target-box" style="border-left: 4px solid #e3b341;">
-                    <div class="target-title">🛡️ 嚴格防守停損價 (Stop-Loss)</div>
-                    <div class="target-val-stop">${stop_loss_price}</div>
-                    <div class="target-desc">跌破支撐或回檔 7% 嚴格停損</div>
+                <div class="target-box" style="border-left: 4px solid #38bdf8;">
+                    <div class="target-title">🌊 中線波段目標 (1~3個月)</div>
+                    <div style="font-size: 1.45rem; font-weight: 700; color: #38bdf8;">${mid_target}</div>
+                    <div class="target-desc">預期空間 +{((mid_target-curr_price)/curr_price)*100:.1f}% ｜ 停損 ${mid_stop}</div>
                 </div>
                 """, unsafe_allow_html=True)
                 
             with b4:
-                score = 0
-                if curr_price > ma20: score += 1
-                if curr_price > ma60: score += 1
-                if latest["K"] > latest["D"]: score += 1
-                if 40 <= latest["RSI"] <= 65: score += 1
-                
-                status_text = "強烈偏多 (多方掌控)" if score >= 3 else "震盪整理 (多空拉鋸)" if score == 2 else "偏空修正 (觀望為宜)"
-                status_color = "#f85149" if score >= 3 else "#e3b341" if score == 2 else "#3fb950"
-                
                 st.markdown(f"""
-                <div class="target-box" style="border-left: 4px solid {status_color};">
-                    <div class="target-title">🧭 多空綜合診斷評分</div>
-                    <div style="font-size: 1.45rem; font-weight: 700; color: {status_color};">{status_text}</div>
-                    <div class="target-desc">量化總評分：{score} / 4 分</div>
+                <div class="target-box" style="border-left: 4px solid #a855f7;">
+                    <div class="target-title">🏛️ 長線價值目標 (半年~1年)</div>
+                    <div style="font-size: 1.45rem; font-weight: 700; color: #c084fc;">${long_target}</div>
+                    <div class="target-desc">預期空間 +{((long_target-curr_price)/curr_price)*100:.1f}% ｜ 防守 ${long_stop}</div>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -518,7 +517,7 @@ if search_query:
                     c_macd = latest["MACD_OSC"] > 0
                     c_kd = (latest["K"] > latest["D"]) and (latest["K"] < 75)
                     c_rsi_safe = latest["RSI"] < 70
-                    c_near_sup = curr_price <= (sup1 * 1.03)
+                    c_near_sup = curr_price <= (ma20 * 1.03)
                     
                     entry_points = sum([c_ma, c_macd, c_kd, c_rsi_safe])
                     
@@ -529,7 +528,7 @@ if search_query:
                     elif c_near_sup and c_ma:
                         d_class = "decision-batch-buy"
                         d_title = "🔵 【可分批入手】回測支撐有守"
-                        d_desc = f"股價回測月線/支撐區 (${sup1:.1f})，盈虧比極佳，建議採分批掛單建倉策略。"
+                        d_desc = f"股價回測月線/支撐區 (${ma20:.1f})，盈虧比極佳，建議採分批掛單建倉策略。"
                     elif latest["RSI"] >= 70:
                         d_class = "decision-wait"
                         d_title = "🟠 【暫緩入手】短線指標過熱 (防拉回)"
@@ -541,7 +540,7 @@ if search_query:
                     else:
                         d_class = "decision-wait"
                         d_title = "🟡 【建議觀望】等待方向明朗"
-                        d_desc = f"處於 ${sup1:.1f} ~ ${res1:.1f} 區間盤整，等待帶量突破壓力位後再順勢進場。"
+                        d_desc = f"處於 ${ma20:.1f} ~ ${res1:.1f} 區間盤整，等待帶量突破壓力位後再順勢進場。"
                         
                     st.markdown(f"""
                     <div class="{d_class}">
@@ -564,12 +563,12 @@ if search_query:
                     """)
                     
                     st.markdown("---")
-                    st.markdown("#### 📐 關鍵支撐與壓力")
+                    st.markdown("#### 📐 各週期目標速查")
                     st.markdown(f"""
-                    * **目標壓力價**: `${res1}`
-                    * **現價**: `${curr_price:.2f}`
-                    * **關鍵防守支撐**: `${sup1}`
-                    * **嚴格停損底線**: `${stop_loss_price}`
+                    * **短線目標 (1~2週)**: `${short_target}`
+                    * **中線波段目標 (1~3月)**: `${mid_target}`
+                    * **長線價值目標 (半年~1年)**: `${long_target}`
+                    * **短線防守停損**: `${short_stop}`
                     """)
                     
                 with col_chart:
@@ -601,9 +600,10 @@ if search_query:
                     fig.add_trace(go.Scatter(x=df.index, y=df['MA20'], name='20MA(月線)', line=dict(color='#58a6ff', width=1.6)), row=1, col=1)
                     fig.add_trace(go.Scatter(x=df.index, y=df['MA60'], name='60MA(季線)', line=dict(color='#bc8cff', width=1.8)), row=1, col=1)
                     
+                    # 標註中線壓力與短線支撐
                     fig.add_hline(
                         y=res1, line_dash="dash", line_color="#f85149", line_width=2,
-                        annotation_text=f" 🚨 壓力位 ${res1} ",
+                        annotation_text=f" 🚨 波段壓力 ${res1} ",
                         annotation_position="top left",
                         annotation_font_size=13,
                         annotation_font_color="#ffffff",
@@ -612,7 +612,7 @@ if search_query:
                     )
                     fig.add_hline(
                         y=sup1, line_dash="dash", line_color="#3fb950", line_width=2,
-                        annotation_text=f" 🛡️ 支撐位 ${sup1} ",
+                        annotation_text=f" 🛡️ 月線支撐 ${sup1} ",
                         annotation_position="bottom left",
                         annotation_font_size=13,
                         annotation_font_color="#ffffff",
@@ -657,17 +657,14 @@ if search_query:
             with tab2:
                 st.markdown("#### ⏳ 該檔標的【短線・中線・長線】多空維度量化評估")
                 
-                # 短線動態判定 (5日均線、KD、RSI)
                 s_bull = curr_price > latest["MA5"] and latest["K"] > latest["D"]
                 s_tag = "🚀 短線偏多攻擊" if s_bull else "⚠️ 短線震盪整理"
                 s_color = "#f85149" if s_bull else "#e3b341"
                 
-                # 中線動態判定 (20日月線、MACD)
                 m_bull = curr_price > latest["MA20"] and latest["MACD_OSC"] > 0
                 m_tag = "📈 中線多頭排列" if m_bull else "📉 中線偏空修正"
                 m_color = "#f85149" if m_bull else "#3fb950"
                 
-                # 長線動態判定 (60日季線、ROE)
                 roe_val = info.get("returnOnEquity")
                 l_bull = curr_price > latest["MA60"] or (roe_val is not None and roe_val >= 0.15)
                 l_tag = "💎 長線體質優異 (具護城河)" if l_bull else "🛡️ 長線景氣循環 (逢低佈局)"
@@ -681,9 +678,10 @@ if search_query:
                         <h4 style="color: {s_color}; margin-top: 0;">⚡ 短線操作 (1 ~ 2 週)</h4>
                         <div style="font-size: 1.1rem; font-weight: 700; color: #ffffff; margin-bottom: 8px;">{s_tag}</div>
                         <ul style="color: #cbd5e1; font-size: 0.88rem; padding-left: 18px; line-height: 1.6;">
+                            <li><b>短線獲利目標</b>：<b>${short_target}</b> (預期 +{((short_target-curr_price)/curr_price)*100:.1f}%)。</li>
                             <li><b>核心觀察指標</b>：5日均線 (<b>${latest['MA5']:.2f}</b>)、KD隨機指標 (<b>{latest['K']:.1f}</b>)。</li>
                             <li><b>進出場原則</b>：站上 5MA 順勢做多；KD 高檔 (>80) 死亡交叉時分批停利。</li>
-                            <li><b>關鍵停損點</b>：跌破現價 5% 或跌破 5 日線即刻防守。</li>
+                            <li><b>關鍵停損點</b>：<b>${short_stop}</b> (跌破 5 日線即刻防守)。</li>
                         </ul>
                     </div>
                     """, unsafe_allow_html=True)
@@ -694,9 +692,10 @@ if search_query:
                         <h4 style="color: {m_color}; margin-top: 0;">🌊 中線波段 (1 ~ 3 個月)</h4>
                         <div style="font-size: 1.1rem; font-weight: 700; color: #ffffff; margin-bottom: 8px;">{m_tag}</div>
                         <ul style="color: #cbd5e1; font-size: 0.88rem; padding-left: 18px; line-height: 1.6;">
+                            <li><b>波段滿足目標</b>：<b>${mid_target}</b> (預期 +{((mid_target-curr_price)/curr_price)*100:.1f}%)。</li>
                             <li><b>核心觀察指標</b>：20日生命線 (<b>${latest['MA20']:.2f}</b>)、MACD柱狀體。</li>
                             <li><b>波段買進區</b>：回測月線有守 (${sup1:.1f}) 為右側最佳買點。</li>
-                            <li><b>波段滿足目標</b>：前波壓力區 <b>${res1:.1f}</b>。</li>
+                            <li><b>波段防守點</b>：<b>${mid_stop}</b> (跌破月線轉弱減碼)。</li>
                         </ul>
                     </div>
                     """, unsafe_allow_html=True)
@@ -707,9 +706,10 @@ if search_query:
                         <h4 style="color: {l_color}; margin-top: 0;">🏛️ 長線存股與價值 (半年 ~ 1年)</h4>
                         <div style="font-size: 1.1rem; font-weight: 700; color: #ffffff; margin-bottom: 8px;">{l_tag}</div>
                         <ul style="color: #cbd5e1; font-size: 0.88rem; padding-left: 18px; line-height: 1.6;">
+                            <li><b>長線價值目標</b>：<b>${long_target}</b> (預期 +{((long_target-curr_price)/curr_price)*100:.1f}%)。</li>
                             <li><b>核心觀察指標</b>：60日季線 (<b>${latest['MA60']:.2f}</b>)、ROE與殖利率。</li>
-                            <li><b>存股進場策略</b>：股價拉回至季線鐵板 (${sup2:.1f}) 採取定期定額或金字塔分批向下建倉。</li>
-                            <li><b>持股底線</b>：只要長期基本面獲利未衰退，不必理會短線震盪。</li>
+                            <li><b>存股進場策略</b>：拉回至季線鐵板 (${sup2:.1f}) 採取金字塔分批建倉。</li>
+                            <li><b>長期底線</b>：<b>${long_stop}</b> (基本面長期獲利未衰退可持續持有)。</li>
                         </ul>
                     </div>
                     """, unsafe_allow_html=True)
