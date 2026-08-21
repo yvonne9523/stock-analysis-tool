@@ -28,7 +28,7 @@ st.markdown("""
         background: #161b22;
         border: 1px solid #30363d;
         border-radius: 10px;
-        padding: 16px 20px;
+        padding: 18px 20px;
         margin-bottom: 15px;
     }
     .target-box {
@@ -501,7 +501,7 @@ if search_query:
 
             tab1, tab2, tab3 = st.tabs([
                 "📊 支撐壓力 K 線與全指標",
-                "🔮 未來走勢情境預測",
+                "⏳ 短中長線多空維度評估",
                 "🏢 基本面真實財務評價"
             ])
             
@@ -588,7 +588,6 @@ if search_query:
                         subplot_titles=('', f'副圖指標：{sub_indicator}')
                     )
                     
-                    # 主圖 K 線
                     fig.add_trace(go.Candlestick(
                         x=df.index,
                         open=df['Open'], high=df['High'],
@@ -598,12 +597,10 @@ if search_query:
                         decreasing_line_color='#3fb950', decreasing_fillcolor='#3fb950'
                     ), row=1, col=1)
                     
-                    # 均線
                     fig.add_trace(go.Scatter(x=df.index, y=df['MA5'], name='5MA', line=dict(color='#d29922', width=1.2)), row=1, col=1)
                     fig.add_trace(go.Scatter(x=df.index, y=df['MA20'], name='20MA(月線)', line=dict(color='#58a6ff', width=1.6)), row=1, col=1)
                     fig.add_trace(go.Scatter(x=df.index, y=df['MA60'], name='60MA(季線)', line=dict(color='#bc8cff', width=1.8)), row=1, col=1)
                     
-                    # 支撐與壓力線
                     fig.add_hline(
                         y=res1, line_dash="dash", line_color="#f85149", line_width=2,
                         annotation_text=f" 🚨 壓力位 ${res1} ",
@@ -623,7 +620,6 @@ if search_query:
                         row=1, col=1
                     )
                     
-                    # 副圖動態切換
                     if "Volume" in sub_indicator:
                         vol_colors = ['#f85149' if df['Close'].iloc[i] >= df['Open'].iloc[i] else '#3fb950' for i in range(len(df))]
                         fig.add_trace(go.Bar(x=df.index, y=df['Volume'], name='成交量', marker_color=vol_colors), row=2, col=1)
@@ -655,42 +651,72 @@ if search_query:
                     fig.update_yaxes(gridcolor='#21262d', zeroline=False)
                     st.plotly_chart(fig, use_container_width=True)
 
-            # TAB 2: 未來情境預測
+            # -------------------------------------------------------------
+            # TAB 2: 短線 / 中線 / 長線 實戰維度評估
+            # -------------------------------------------------------------
             with tab2:
-                st.markdown("#### 🔮 該檔標的未來 1~3 個月趨勢預測與劇本拆解")
-                col_sc1, col_sc2, col_sc3 = st.columns(3)
+                st.markdown("#### ⏳ 該檔標的【短線・中線・長線】多空維度量化評估")
                 
-                with col_sc1:
+                # 短線動態判定 (5日均線、KD、RSI)
+                s_bull = curr_price > latest["MA5"] and latest["K"] > latest["D"]
+                s_tag = "🚀 短線偏多攻擊" if s_bull else "⚠️ 短線震盪整理"
+                s_color = "#f85149" if s_bull else "#e3b341"
+                
+                # 中線動態判定 (20日月線、MACD)
+                m_bull = curr_price > latest["MA20"] and latest["MACD_OSC"] > 0
+                m_tag = "📈 中線多頭排列" if m_bull else "📉 中線偏空修正"
+                m_color = "#f85149" if m_bull else "#3fb950"
+                
+                # 長線動態判定 (60日季線、ROE)
+                roe_val = info.get("returnOnEquity")
+                l_bull = curr_price > latest["MA60"] or (roe_val is not None and roe_val >= 0.15)
+                l_tag = "💎 長線體質優異 (具護城河)" if l_bull else "🛡️ 長線景氣循環 (逢低佈局)"
+                l_color = "#58a6ff" if l_bull else "#8b949e"
+                
+                col_t1, col_t2, col_t3 = st.columns(3)
+                
+                with col_t1:
                     st.markdown(f"""
-                    <div class="card-box" style="border-top: 3px solid #f85149;">
-                        <h4 style="color: #f85149; margin-top: 0;">🚀 樂觀情境 (機率 45%)</h4>
-                        <p><b>觸發條件</b>：成交量溫和放大，帶量突破壓力位 <b>${res1}</b>。</p>
-                        <p><b>未來目標價</b>：有望向上挑戰波段高點 <b>${res2}</b> 或更高位階。</p>
-                        <p style="color: #8b949e; font-size: 0.85rem;">操作：順勢持股續抱，沿 5 日線移動停利。</p>
+                    <div class="card-box" style="border-top: 3px solid {s_color};">
+                        <h4 style="color: {s_color}; margin-top: 0;">⚡ 短線操作 (1 ~ 2 週)</h4>
+                        <div style="font-size: 1.1rem; font-weight: 700; color: #ffffff; margin-bottom: 8px;">{s_tag}</div>
+                        <ul style="color: #cbd5e1; font-size: 0.88rem; padding-left: 18px; line-height: 1.6;">
+                            <li><b>核心觀察指標</b>：5日均線 (<b>${latest['MA5']:.2f}</b>)、KD隨機指標 (<b>{latest['K']:.1f}</b>)。</li>
+                            <li><b>進出場原則</b>：站上 5MA 順勢做多；KD 高檔 (>80) 死亡交叉時分批停利。</li>
+                            <li><b>關鍵停損點</b>：跌破現價 5% 或跌破 5 日線即刻防守。</li>
+                        </ul>
                     </div>
                     """, unsafe_allow_html=True)
                     
-                with col_sc2:
+                with col_t2:
                     st.markdown(f"""
-                    <div class="card-box" style="border-top: 3px solid #e3b341;">
-                        <h4 style="color: #e3b341; margin-top: 0;">⚖️ 中性格局 (機率 35%)</h4>
-                        <p><b>觸發條件</b>：量能平平，價格於 <b>${sup1} ~ ${res1}</b> 區間震盪。</p>
-                        <p><b>未來走勢</b>：月線 (MA20) 持續走平，進行箱型時間換取空間整理。</p>
-                        <p style="color: #8b949e; font-size: 0.85rem;">操作：逢低在箱底支撐附近買進，逢高調節不追高。</p>
+                    <div class="card-box" style="border-top: 3px solid {m_color};">
+                        <h4 style="color: {m_color}; margin-top: 0;">🌊 中線波段 (1 ~ 3 個月)</h4>
+                        <div style="font-size: 1.1rem; font-weight: 700; color: #ffffff; margin-bottom: 8px;">{m_tag}</div>
+                        <ul style="color: #cbd5e1; font-size: 0.88rem; padding-left: 18px; line-height: 1.6;">
+                            <li><b>核心觀察指標</b>：20日生命線 (<b>${latest['MA20']:.2f}</b>)、MACD柱狀體。</li>
+                            <li><b>波段買進區</b>：回測月線有守 (${sup1:.1f}) 為右側最佳買點。</li>
+                            <li><b>波段滿足目標</b>：前波壓力區 <b>${res1:.1f}</b>。</li>
+                        </ul>
                     </div>
                     """, unsafe_allow_html=True)
                     
-                with col_sc3:
+                with col_t3:
                     st.markdown(f"""
-                    <div class="card-box" style="border-top: 3px solid #3fb950;">
-                        <h4 style="color: #3fb950; margin-top: 0;">⚠️ 悲觀修正 (機率 20%)</h4>
-                        <p><b>觸發條件</b>：跌破短期關鍵支撐 <b>${sup1}</b> 或總經利空回檔。</p>
-                        <p><b>未來支撐價</b>：下測季線或前波低點 <b>${sup2}</b> 尋求支撐。</p>
-                        <p style="color: #8b949e; font-size: 0.85rem;">操作：跌破停損價 <b>${stop_loss_price}</b> 時果斷減碼收回資金。</p>
+                    <div class="card-box" style="border-top: 3px solid {l_color};">
+                        <h4 style="color: {l_color}; margin-top: 0;">🏛️ 長線存股與價值 (半年 ~ 1年)</h4>
+                        <div style="font-size: 1.1rem; font-weight: 700; color: #ffffff; margin-bottom: 8px;">{l_tag}</div>
+                        <ul style="color: #cbd5e1; font-size: 0.88rem; padding-left: 18px; line-height: 1.6;">
+                            <li><b>核心觀察指標</b>：60日季線 (<b>${latest['MA60']:.2f}</b>)、ROE與殖利率。</li>
+                            <li><b>存股進場策略</b>：股價拉回至季線鐵板 (${sup2:.1f}) 採取定期定額或金字塔分批向下建倉。</li>
+                            <li><b>持股底線</b>：只要長期基本面獲利未衰退，不必理會短線震盪。</li>
+                        </ul>
                     </div>
                     """, unsafe_allow_html=True)
 
+            # -------------------------------------------------------------
             # TAB 3: 基本面
+            # -------------------------------------------------------------
             with tab3:
                 st.markdown("#### 🏢 即時真實財務指標與基本面評價")
                 f1, f2 = st.columns(2)
