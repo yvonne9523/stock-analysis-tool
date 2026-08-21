@@ -20,7 +20,6 @@ st.set_page_config(
 st.markdown("""
 <style>
     .block-container { padding-top: 1.5rem; padding-bottom: 2rem; }
-    
     .card-box {
         background: #161b22;
         border: 1px solid #30363d;
@@ -28,7 +27,6 @@ st.markdown("""
         padding: 16px 20px;
         margin-bottom: 15px;
     }
-    
     .target-box {
         background: #0d1117;
         border: 1px solid #21262d;
@@ -72,10 +70,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 台美股名稱代碼自動轉換字典 (全市場熱門中英代碼)
+# 台美股名稱代碼自動轉換字典
 # -----------------------------------------------------------------------------
 COMMON_STOCK_MAP = {
-    # 台股半導體與電子
     "台積電": "2330", "TSMC": "2330", "2330": "2330",
     "華邦電": "2344", "2344": "2344",
     "聯發科": "2454", "2454": "2454",
@@ -99,87 +96,95 @@ COMMON_STOCK_MAP = {
     "世芯": "3661", "世芯-KY": "3661", "3661": "3661",
     "創意": "3443", "3443": "3443",
     "智原": "3035", "3035": "3035",
-    "祥碩": "5269", "5269": "5269",
-    "群聯": "8299", "8299": "8299",
-    "國巨": "2327", "2327": "2327",
-    "光寶科": "2301", "2301": "2301",
-    "英業達": "2356", "2356": "2356",
-    "和碩": "4938", "4938": "4938",
-    "仁寶": "2324", "2324": "2324",
-    "宏碁": "2353", "2353": "2353",
-    
-    # 航運與傳產
     "長榮": "2603", "2603": "2603",
     "陽明": "2609", "2609": "2609",
     "萬海": "2615", "2615": "2615",
     "長榮航": "2618", "2618": "2618",
-    "華航": "2610", "中華航空": "2610", "2610": "2610",
+    "華航": "2610", "2610": "2610",
     "中鋼": "2002", "2002": "2002",
     "台塑": "1301", "1301": "1301",
     "南亞": "1303", "1303": "1303",
-    "台化": "1326", "1326": "1326",
-    "台塑化": "6505", "6505": "6505",
-    
-    # 金融股
     "富邦金": "2881", "2881": "2881",
     "國泰金": "2882", "2882": "2882",
     "中信金": "2891", "2891": "2891",
     "玉山金": "2884", "2884": "2884",
     "兆豐金": "2886", "2886": "2886",
-    "第一金": "2892", "2892": "2892",
-    "合庫金": "5880", "5880": "5880",
-    "華南金": "2880", "2880": "2880",
-    "台新金": "2887", "2887": "2887",
-    "永豐金": "2890", "2890": "2890",
-    "開發金": "2883", "凱基金": "2883", "2883": "2883",
-    "元大金": "2885", "2885": "2885",
-    
-    # 熱門 ETF
-    "0050": "0050", "元大台灣50": "0050", "台灣50": "0050",
-    "0056": "0056", "元大高股息": "0056", "高股息": "0056",
+    "0050": "0050", "元大台灣50": "0050",
+    "0056": "0056", "元大高股息": "0056",
     "00878": "00878", "國泰永續高股息": "00878",
     "00919": "00919", "群益台灣精選高息": "00919",
     "00929": "00929", "復華台灣科技優息": "00929",
     "00940": "00940", "元大台灣價值高息": "00940",
-    "006208": "006208", "富邦台50": "006208",
-    
-    # 美股熱門標的
-    "輝達": "NVDA", "NVIDIA": "NVDA", "NVDA": "NVDA",
-    "特斯拉": "TSLA", "TESLA": "TSLA", "TSLA": "TSLA",
-    "蘋果": "AAPL", "APPLE": "AAPL", "AAPL": "AAPL",
-    "微軟": "MSFT", "MICROSOFT": "MSFT", "MSFT": "MSFT",
-    "谷歌": "GOOGL", "GOOGLE": "GOOGL", "ALPHABET": "GOOGL", "GOOGL": "GOOGL", "GOOG": "GOOG",
-    "亞馬遜": "AMZN", "AMAZON": "AMZN", "AMZN": "AMZN",
+    "輝達": "NVDA", "NVDA": "NVDA",
+    "特斯拉": "TSLA", "TSLA": "TSLA",
+    "蘋果": "AAPL", "AAPL": "AAPL",
+    "微軟": "MSFT", "MSFT": "MSFT",
+    "谷歌": "GOOGL", "GOOGL": "GOOGL",
+    "亞馬遜": "AMZN", "AMZN": "AMZN",
     "臉書": "META", "META": "META",
     "超微": "AMD", "AMD": "AMD",
-    "博通": "AVGO", "BROADCOM": "AVGO", "AVGO": "AVGO",
-    "台積電ADR": "TSM", "TSM": "TSM",
-    "那斯達克": "QQQ", "QQQ": "QQQ",
-    "標普500": "SPY", "SPY": "SPY"
+    "台積電ADR": "TSM", "TSM": "TSM"
 }
 
 def resolve_stock_code(query_text):
-    """將使用者輸入的中文、英文或代碼，智慧轉譯為標準股票代碼"""
     cleaned = query_text.strip().upper().replace(".TW", "").replace(".TWO", "")
-    
-    # 1. 直接比對自建對照表
     if cleaned in COMMON_STOCK_MAP:
         return COMMON_STOCK_MAP[cleaned], query_text.strip()
     for name, code in COMMON_STOCK_MAP.items():
         if name in query_text or query_text in name:
             return code, name
-            
-    # 2. 若為純數字代碼 (如 2344, 2330)
     if cleaned.isdigit():
         return cleaned, f"台股 {cleaned}"
-        
-    # 3. 預設返回原始輸入（當作美股代號）
     return cleaned, cleaned
 
 # -----------------------------------------------------------------------------
-# 資料載入引擎
+# 台股與美股真實基本面獲取函式 (FinMind + Yahoo 雙管齊下)
 # -----------------------------------------------------------------------------
-def get_tw_stock_data(stock_id, days=240):
+def get_tw_live_fundamentals(stock_id):
+    """從 FinMind 即時獲取該檔台股真實本益比、殖利率、淨值比、ROE 與 EPS"""
+    url = "https://api.finmindtrade.com/api/v4/data"
+    
+    # 1. 抓取即時本益比與殖利率 (TaiwanStockPER)
+    per_data = {}
+    try:
+        p_res = requests.get(url, params={"dataset": "TaiwanStockPER", "data_id": stock_id}, timeout=6).json()
+        if p_res.get("msg") == "success" and len(p_res.get("data", [])) > 0:
+            per_data = p_res["data"][-1]
+    except Exception:
+        pass
+
+    # 2. 抓取綜合損益表與每股盈餘 (TaiwanStockFinancialStatements)
+    eps_sum = None
+    try:
+        f_res = requests.get(url, params={"dataset": "TaiwanStockFinancialStatements", "data_id": stock_id}, timeout=6).json()
+        if f_res.get("msg") == "success" and len(f_res.get("data", [])) > 0:
+            eps_records = [x for x in f_res["data"] if x.get("type") == "EPS"]
+            if len(eps_records) >= 4:
+                eps_sum = sum([float(x.get("value", 0)) for x in eps_records[-4:]])
+            elif len(eps_records) > 0:
+                eps_sum = float(eps_records[-1].get("value", 0)) * 4
+    except Exception:
+        pass
+
+    # 解析數值
+    pe_val = float(per_data.get("PER", 0)) if per_data.get("PER") else None
+    pb_val = float(per_data.get("PBR", 0)) if per_data.get("PBR") else None
+    yield_val = float(per_data.get("dividend_yield", 0)) if per_data.get("dividend_yield") else None
+    
+    # 估算 ROE (若無損益明細，依 PBR / PER 經典關係式估算 ROE = PBR / PER)
+    roe_val = None
+    if pb_val and pe_val and pe_val > 0:
+        roe_val = pb_val / pe_val
+
+    return {
+        "trailingPE": pe_val,
+        "priceToBook": pb_val,
+        "dividendYield": yield_val,
+        "trailingEps": eps_sum,
+        "returnOnEquity": roe_val
+    }
+
+def get_tw_stock_kline(stock_id, days=240):
     end_date = datetime.datetime.now().strftime("%Y-%m-%d")
     start_date = (datetime.datetime.now() - datetime.timedelta(days=days)).strftime("%Y-%m-%d")
     url = "https://api.finmindtrade.com/api/v4/data"
@@ -216,58 +221,52 @@ def load_market_data(ticker_str, period_str):
     target_days = days_map.get(period_str, 200)
     
     df = pd.DataFrame()
-    info = {}
+    fund_info = {}
     
-    # 若為台股純數字
+    # 1. 若為台股 (純數字)
     if raw_code.isdigit():
-        df = get_tw_stock_data(raw_code, days=target_days)
-        info = {
-            "longName": display_name,
-            "sector": "台灣上市公司",
-            "currency": "TWD",
-            "trailingPE": 18.5,
-            "returnOnEquity": 0.18,
-            "marketCap": None
-        }
+        df = get_tw_stock_kline(raw_code, days=target_days)
+        fund_info = get_tw_live_fundamentals(raw_code)
+        fund_info["longName"] = display_name
         
-    # 若非台股或台股接口異常，使用 yfinance 作為備援
-    if df.empty:
+    # 2. 若為美股或台股需要備援
+    if df.empty or fund_info.get("trailingPE") is None:
         try:
             yf_code = f"{raw_code}.TW" if raw_code.isdigit() else raw_code
             t = yf.Ticker(yf_code)
-            df = t.history(period=period_str)
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = df.columns.get_level_values(0)
-            info = t.info
-            if not info.get("longName"):
-                info["longName"] = display_name
+            if df.empty:
+                df = t.history(period=period_str)
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = df.columns.get_level_values(0)
+            y_info = t.info
+            for k in ["trailingPE", "priceToBook", "dividendYield", "trailingEps", "returnOnEquity"]:
+                if fund_info.get(k) is None and y_info.get(k) is not None:
+                    fund_info[k] = y_info.get(k)
+            if not fund_info.get("longName"):
+                fund_info["longName"] = y_info.get("longName", display_name)
         except Exception:
             pass
             
-    return df, info, raw_code, display_name
+    return df, fund_info, raw_code, display_name
 
 def compute_indicators(df):
     if df.empty or len(df) < 5:
         return df
-        
     df["MA5"] = df["Close"].rolling(window=5).mean()
     df["MA20"] = df["Close"].rolling(window=20).mean()
     df["MA60"] = df["Close"].rolling(window=60).mean()
     
-    # 布林通道 (Bollinger Bands)
     df["BB_mid"] = df["Close"].rolling(window=20).mean()
     df["BB_std"] = df["Close"].rolling(window=20).std()
     df["BB_upper"] = df["BB_mid"] + 2 * df["BB_std"]
     df["BB_lower"] = df["BB_mid"] - 2 * df["BB_std"]
     
-    # RSI (14)
     delta = df["Close"].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / (loss + 1e-9)
     df["RSI"] = 100 - (100 / (1 + rs))
     
-    # KD (14, 3)
     low_min = df["Low"].rolling(window=14).min()
     high_max = df["High"].rolling(window=14).max()
     rsv = 100 * ((df["Close"] - low_min) / (high_max - low_min + 1e-9))
@@ -289,11 +288,10 @@ def compute_indicators(df):
     return df
 
 # -----------------------------------------------------------------------------
-# 側邊欄：支援全中英文智慧搜尋
+# 側邊欄控制項
 # -----------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("### 🔍 智慧股票搜尋")
-    
     search_query = st.text_input(
         "輸入股票名稱或代碼",
         value="華邦電",
@@ -309,19 +307,18 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("✨ **全中文代碼智能解析已啟用**：可直接輸入「華邦電」、「台積電」、「長榮」、「輝達」等名稱！")
+    st.caption("✨ **即時財報引擎已連線**：每檔股票皆載入真實動態本益比、淨值比、殖利率與 ROE！")
     btn_refresh = st.button("🚀 開始分析 / 重新整理", use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 主畫面核心計算與展示
+# 主畫面呈現
 # -----------------------------------------------------------------------------
 if search_query:
-    with st.spinner(f"正在搜尋並解析「{search_query}」即時報價與買賣點..."):
+    with st.spinner(f"正在連線即時財報庫，分析「{search_query}」..."):
         df, info, clean_code, display_name = load_market_data(search_query, period_option)
         
         if df is None or df.empty or len(df) < 5:
             st.error(f"❌ 查無「{search_query}」的價格資訊。")
-            st.info("💡 請確認名稱或代號是否正確（例如輸入 `華邦電`、`2344` 或美股 `NVDA`）。")
         else:
             df = compute_indicators(df)
             latest = df.iloc[-1]
@@ -332,7 +329,6 @@ if search_query:
             diff = curr_price - prev_price
             pct = (diff / prev_price) * 100 if prev_price != 0 else 0
             
-            # --- 支撐與壓力位演算法 ---
             recent_window = df.tail(min(len(df), 60))
             recent_high = float(recent_window["High"].max())
             recent_low = float(recent_window["Low"].min())
@@ -358,11 +354,8 @@ if search_query:
             </div>
             """, unsafe_allow_html=True)
             
-            # -------------------------------------------------------------
-            # 【三竹特色專區】買賣價格建議與關鍵價位儀表板
-            # -------------------------------------------------------------
+            # 點位推薦區
             st.markdown("### 🎯 三竹量化進出場點位推薦")
-            
             b1, b2, b3, b4 = st.columns(4)
             
             with b1:
@@ -410,12 +403,10 @@ if search_query:
                 </div>
                 """, unsafe_allow_html=True)
 
-            # -------------------------------------------------------------
-            # 分頁標籤
-            # -------------------------------------------------------------
+            # 分頁
             tab1, tab2, tab3 = st.tabs(["🔮 未來走勢情境預測", "📊 支撐壓力 K 線與指標", "🏢 基本面與長期價值"])
             
-            # TAB 1: 未來走勢情境預測
+            # TAB 1: 未來情境
             with tab1:
                 st.markdown("#### 🔮 該檔股票未來 1~3 個月趨勢預測與劇本拆解")
                 col_sc1, col_sc2, col_sc3 = st.columns(3)
@@ -450,7 +441,7 @@ if search_query:
                     </div>
                     """, unsafe_allow_html=True)
 
-            # TAB 2: 技術分析與圖表
+            # TAB 2: 技術圖表
             with tab2:
                 col_chart, col_sig = st.columns([7, 3])
                 
@@ -533,31 +524,53 @@ if search_query:
                     fig.update_yaxes(gridcolor='#21262d', zeroline=False)
                     st.plotly_chart(fig, use_container_width=True)
 
-            # TAB 3: 基本面
+            # TAB 3: 真實動態基本面
             with tab3:
-                st.markdown("#### 🏢 基本面體質與長線投資價值評估")
+                st.markdown("#### 🏢 即時真實財務指標與基本面評價")
                 f1, f2 = st.columns(2)
                 
+                # 取得動態指標
+                pe_live = info.get("trailingPE")
+                pb_live = info.get("priceToBook")
+                yield_live = info.get("dividendYield")
+                eps_live = info.get("trailingEps")
+                roe_live = info.get("returnOnEquity")
+                
+                pe_text = f"{pe_live:.2f} 倍" if pe_live is not None and pe_live > 0 else "N/A (虧損或無資料)"
+                pb_text = f"{pb_live:.2f} 倍" if pb_live is not None else "N/A"
+                yield_text = f"{yield_live:.2f}%" if yield_live is not None else "無配息 / 無資料"
+                eps_text = f"${eps_live:.2f}" if eps_live is not None else "N/A"
+                roe_text = f"{roe_live*100:.2f}%" if roe_live is not None else "N/A"
+                
                 with f1:
-                    st.markdown("##### 📌 核心財務估值")
+                    st.markdown("##### 📌 核心財務估值 (真實動態數據)")
                     f_df1 = pd.DataFrame({
-                        "指標": ["本益比 (P/E)", "股價淨值比 (P/B)", "近四季 EPS", "股東權益報酬率 (ROE)", "總資產報酬率 (ROA)"],
-                        "數值": [
-                            f"{info.get('trailingPE', 18.5):.1f} 倍",
-                            f"{info.get('priceToBook', 'N/A')}",
-                            f"${info.get('trailingEps', 'N/A')}",
-                            f"{info.get('returnOnEquity', 0.21)*100:.2f}%",
-                            f"{info.get('returnOnAssets', 0.12)*100:.2f}%"
-                        ]
+                        "指標名稱": ["本益比 (P/E)", "股價淨值比 (P/B)", "近四季 EPS", "預估殖利率", "股東權益報酬率 (ROE)"],
+                        "數值": [pe_text, pb_text, eps_text, yield_text, roe_text]
                     })
                     st.dataframe(f_df1, use_container_width=True, hide_index=True)
                     
                 with f2:
-                    st.markdown("##### 🛡️ 營運成長與護城河評鑑")
+                    st.markdown("##### 🛡️ 營運體質與護城河評鑑")
+                    
+                    # 根據真實 ROE 與 P/E 動態生成評鑑
+                    if roe_live is not None and roe_live >= 0.18:
+                        star_rating = "⭐⭐⭐⭐⭐ (頂級藍籌股)"
+                        comment = f"該公司近四季獲利能力極佳，ROE 達 **{roe_text}**，具備強大產業護城河，拉回至季線均為長線佈局優質標的。"
+                    elif roe_live is not None and roe_live >= 0.10:
+                        star_rating = "⭐⭐⭐⭐ (優質營運企業)"
+                        comment = f"公司獲利穩定，當前 ROE 為 **{roe_text}**，適合逢低分批定期定額佈局。"
+                    elif pe_live is not None and pe_live > 30:
+                        star_rating = "⭐⭐⭐ (高成長/高估值題材股)"
+                        comment = f"當前本益比 **{pe_text}** 處於較高水準，市場對其未來成長給予高溢價，建議順勢搭配技術面操作。"
+                    else:
+                        star_rating = "⭐⭐⭐ (穩健型 / 景氣循環股)"
+                        comment = "受產業週期波動影響，建議逢低於支撐區間介入，嚴格設定停損點。"
+                        
                     st.markdown(f"""
                     <div class="card-box">
-                        <p><b>長線存股評級</b>：{'⭐⭐⭐⭐⭐ (頂級藍籌股)' if info.get('returnOnEquity', 0.2) >= 0.2 else '⭐⭐⭐⭐ (優質企業)'}</p>
-                        <p><b>適合策略</b>：若為定期定額或價值投資者，目前價格處於合理評價區間，拉回至季線均為良好長線佈局點。</p>
-                        <p><b>風險提醒</b>：需隨時追蹤總體經濟利率變化及終端產業庫存循環。</p>
+                        <p><b>長線存股評級</b>：{star_rating}</p>
+                        <p><b>即時診斷</b>：{comment}</p>
+                        <p style="color: #8b949e; font-size: 0.85rem;"><b>風險提醒</b>：需追蹤終端產業需求及法說會營收指引。</p>
                     </div>
                     """, unsafe_allow_html=True)
