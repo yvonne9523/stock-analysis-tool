@@ -37,11 +37,15 @@ st.markdown("""
         border-radius: 8px;
         padding: 12px 14px;
         margin-bottom: 10px;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
     }
     .target-title { font-size: 0.8rem; color: #8b949e; margin-bottom: 4px; }
-    .target-val-buy { font-size: 1.35rem; font-weight: 700; color: #f85149; }
-    .target-val-sell { font-size: 1.35rem; font-weight: 700; color: #3fb950; }
-    .target-val-stop { font-size: 1.35rem; font-weight: 700; color: #e3b341; }
+    .target-val-buy { font-size: 1.3rem; font-weight: 700; color: #f85149; }
+    .target-val-sell { font-size: 1.3rem; font-weight: 700; color: #3fb950; }
+    .target-val-stop { font-size: 1.3rem; font-weight: 700; color: #e3b341; }
     .target-desc { font-size: 0.75rem; color: #8b949e; margin-top: 4px; }
     
     .decision-strong-buy {
@@ -459,8 +463,19 @@ if search_query:
             if latest["K"] > latest["D"]: score += 1
             if 40 <= latest["RSI"] <= 65: score += 1
             
-            status_text = "強烈偏多 (多方掌控)" if score >= 3 else "震盪整理 (多空拉鋸)" if score == 2 else "偏空修正 (觀望為宜)"
-            status_color = "#f85149" if score >= 3 else "#e3b341" if score == 2 else "#3fb950"
+            # 簡潔主標籤 + 次級描述，徹底防止文字過長被截斷
+            if score >= 3:
+                diag_main = "強烈偏多"
+                diag_sub = "多方動能掌控"
+                diag_color = "#f85149"
+            elif score == 2:
+                diag_main = "多空震盪"
+                diag_sub = "常態區間盤整"
+                diag_color = "#e3b341"
+            else:
+                diag_main = "偏空修正"
+                diag_sub = "回檔整理觀望"
+                diag_color = "#3fb950"
             
             st.markdown(f"""
             <div style="margin-bottom: 15px;">
@@ -470,7 +485,7 @@ if search_query:
             """, unsafe_allow_html=True)
             
             # -------------------------------------------------------------
-            # 【完整 5 卡片呈現】買進區間 + 短中長目標 + 多空綜合診斷評分
+            # 【完美適配 5 欄卡片】排版自適應優化
             # -------------------------------------------------------------
             st.markdown("### 🎯 短・中・長線量化進出場點位推薦")
             b1, b2, b3, b4, b5 = st.columns(5)
@@ -480,7 +495,7 @@ if search_query:
                 <div class="target-box" style="border-left: 4px solid #f85149;">
                     <div class="target-title">💡 建議買進區間</div>
                     <div class="target-val-buy">${short_buy_low} ~ ${short_buy_high}</div>
-                    <div class="target-desc">回測 5MA / 月線支撐進場</div>
+                    <div class="target-desc">回測 5MA / 月線進場</div>
                 </div>
                 """, unsafe_allow_html=True)
                 
@@ -497,7 +512,7 @@ if search_query:
                 st.markdown(f"""
                 <div class="target-box" style="border-left: 4px solid #38bdf8;">
                     <div class="target-title">🌊 中線波段 (1~3月)</div>
-                    <div style="font-size: 1.35rem; font-weight: 700; color: #38bdf8;">${mid_target}</div>
+                    <div style="font-size: 1.3rem; font-weight: 700; color: #38bdf8;">${mid_target}</div>
                     <div class="target-desc">預期 +{((mid_target-curr_price)/curr_price)*100:.1f}% ｜ 停損 ${mid_stop}</div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -506,17 +521,17 @@ if search_query:
                 st.markdown(f"""
                 <div class="target-box" style="border-left: 4px solid #a855f7;">
                     <div class="target-title">🏛️ 長線價值 (半年~1年)</div>
-                    <div style="font-size: 1.35rem; font-weight: 700; color: #c084fc;">${long_target}</div>
+                    <div style="font-size: 1.3rem; font-weight: 700; color: #c084fc;">${long_target}</div>
                     <div class="target-desc">預期 +{((long_target-curr_price)/curr_price)*100:.1f}% ｜ 防守 ${long_stop}</div>
                 </div>
                 """, unsafe_allow_html=True)
                 
             with b5:
                 st.markdown(f"""
-                <div class="target-box" style="border-left: 4px solid {status_color};">
+                <div class="target-box" style="border-left: 4px solid {diag_color};">
                     <div class="target-title">🧭 多空綜合診斷</div>
-                    <div style="font-size: 1.25rem; font-weight: 700; color: {status_color}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{status_text}</div>
-                    <div class="target-desc">量化總評分：{score} / 4 分</div>
+                    <div style="font-size: 1.3rem; font-weight: 700; color: {diag_color}; line-height: 1.2;">{diag_main}</div>
+                    <div class="target-desc">{diag_sub} ｜ 評分 {score}/4</div>
                 </div>
                 """, unsafe_allow_html=True)
 
