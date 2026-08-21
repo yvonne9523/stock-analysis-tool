@@ -377,7 +377,7 @@ if market_indices:
 st.markdown("<hr style='border-color: #21262d; margin-top: 5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 側邊欄：全球股市小工具與個人持股輸入
+# 側邊欄：全球股市小工具
 # -----------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("### 🌐 全球股市小工具")
@@ -402,17 +402,6 @@ with st.sidebar:
         options=["3mo", "6mo", "1y", "2y"],
         index=1,
         format_func=lambda x: {"3mo": "近 3 個月", "6mo": "近 6 個月", "1y": "近 1 年", "2y": "近 2 年"}.get(x, x)
-    )
-    
-    st.markdown("---")
-    st.markdown("### 💼 我的持股診斷 (選填)")
-    my_cost_input = st.number_input(
-        "輸入您的買入成本 / 均價",
-        min_value=0.0,
-        value=0.0,
-        step=0.5,
-        format="%.2f",
-        help="輸入您目前手上的持股成本，AI 將為您即時計算損益並提供賣出/加碼建議！"
     )
     
     st.markdown("---")
@@ -487,23 +476,37 @@ if search_query:
                 diag_sub = "回檔整理觀望"
                 diag_color = "#3fb950"
             
+            # 頂部個股抬頭
             st.markdown(f"""
-            <div style="margin-bottom: 15px;">
+            <div style="margin-bottom: 12px;">
                 <h1 style="margin: 0; font-size: 2.1rem; color: #f0f6fc;">{display_name} <span style="font-size: 1.2rem; color: #58a6ff;">({clean_code})</span></h1>
                 <span style="color: #8b949e; font-size: 0.9rem;">更新時間：<b>{now_time_str}</b> ｜ 最新報價：<b style="color:{'#f85149' if diff>=0 else '#3fb950'}; font-size: 1.1rem;">${curr_price:,.2f}</b> ({diff:+,.2f}, {pct:+.2f}%)</span>
             </div>
             """, unsafe_allow_html=True)
             
             # -------------------------------------------------------------
-            # 【全新功能】個人持股即時診斷面板 (若使用者有輸入成本價)
+            # 【持股診斷功能】直接移至個股抬頭下方，與個股緊密結合 (移除選填字眼)
             # -------------------------------------------------------------
-            if my_cost_input > 0:
+            with st.expander("💼 我的持股診斷 (點擊展開輸入成本價)", expanded=False):
+                col_cost_in, col_cost_btn = st.columns([4, 6])
+                with col_cost_in:
+                    my_cost_input = st.number_input(
+                        "輸入您的買入成本 / 均價",
+                        min_value=0.0,
+                        value=0.0,
+                        step=0.5,
+                        format="%.2f",
+                        key="main_cost_input",
+                        help="輸入您目前手上的持股成本，AI 將為您即時計算損益並提供賣出/加碼建議！"
+                    )
+            
+            # 若有輸入成本價，立即動態展示診斷卡片
+            if 'my_cost_input' in locals() and my_cost_input > 0:
                 cost_diff = curr_price - my_cost_input
                 cost_pct = (cost_diff / my_cost_input) * 100
                 cost_color = "#f85149" if cost_diff >= 0 else "#3fb950"
                 cost_sign = "+" if cost_diff >= 0 else ""
                 
-                # 專屬持股行動建議邏輯
                 if cost_pct >= 20.0:
                     holding_advice = f"🎉 <b>大幅獲利中 ({cost_sign}{cost_pct:.1f}%)</b>：建議將停利點移動至 20MA 月線 (<b>${ma20:.1f}</b>)，跌破前抱牢享受波段漲幅，或先收回部分本金入袋為安。"
                     box_border = "#f85149"
