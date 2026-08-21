@@ -19,7 +19,12 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    .block-container { padding-top: 1.2rem; padding-bottom: 2rem; }
+    /* 增加頂部間距，徹底解決標題被上方工具列切斷的問題 */
+    .block-container { 
+        padding-top: 3.2rem !important; 
+        padding-bottom: 2rem; 
+    }
+    
     .card-box {
         background: #161b22;
         border: 1px solid #30363d;
@@ -78,19 +83,37 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 全球市場代碼解析引擎 (台股全市場 + 美股 / 日股 / 港股 / ETF / 大盤指數)
+# 分市場股票代碼解析字典
 # -----------------------------------------------------------------------------
-GLOBAL_KNOWN_MAP = {
-    # 大盤指數
-    "加權指數": "^TWII", "台股大盤": "^TWII", "大盤": "^TWII", "TAIEX": "^TWII",
-    "櫃買指數": "^TWOII", "櫃買": "^TWOII", "OTC": "^TWOII",
-    "道瓊指數": "^DJI", "道瓊": "^DJI", "DJI": "^DJI",
-    "標普500": "^GSPC", "S&P500": "^GSPC", "SPX": "^GSPC",
-    "那斯達克": "^IXIC", "NASDAQ": "^IXIC", "那指": "^IXIC",
-    "費城半導體": "^SOX", "費半": "^SOX", "SOX": "^SOX",
-    "日經225": "^N225", "日經": "^N225",
-    
-    # 常用美股巨頭
+TW_KNOWN_MAP = {
+    "台積電": "2330", "TSMC": "2330", "2330": "2330",
+    "聯發科": "2454", "2454": "2454",
+    "鴻海": "2317", "2317": "2317",
+    "華邦電": "2344", "2344": "2344",
+    "長榮": "2603", "2603": "2603",
+    "長榮航": "2618", "2618": "2618",
+    "陽明": "2609", "2609": "2609",
+    "萬海": "2615", "2615": "2615",
+    "廣達": "2382", "2382": "2382",
+    "緯創": "3231", "3231": "3231",
+    "技嘉": "2376", "2376": "2376",
+    "華碩": "2357", "2357": "2357",
+    "台新金": "2887", "2887": "2887",
+    "富邦金": "2881", "2881": "2881",
+    "國泰金": "2882", "2882": "2882",
+    "中信金": "2891", "2891": "2891",
+    "玉山金": "2884", "2884": "2884",
+    "兆豐金": "2886", "2886": "2886",
+    "0050": "0050", "元大台灣50": "0050",
+    "0056": "0056", "元大高股息": "0056",
+    "00878": "00878", "國泰永續高股息": "00878",
+    "00919": "00919", "群益台灣精選高息": "00919",
+    "00929": "00929", "復華台灣科技優息": "00929",
+    "00940": "00940", "元大台灣價值高息": "00940"
+}
+
+US_KNOWN_MAP = {
+    "台積電": "TSM", "台積電ADR": "TSM", "TSM": "TSM",
     "輝達": "NVDA", "NVIDIA": "NVDA", "NVDA": "NVDA",
     "特斯拉": "TSLA", "TESLA": "TSLA", "TSLA": "TSLA",
     "蘋果": "AAPL", "APPLE": "AAPL", "AAPL": "AAPL",
@@ -100,11 +123,20 @@ GLOBAL_KNOWN_MAP = {
     "臉書": "META", "META": "META",
     "超微": "AMD", "AMD": "AMD",
     "博通": "AVGO", "AVGO": "AVGO",
-    "台積電ADR": "TSM", "TSM": "TSM",
     "ARM": "ARM", "安謀": "ARM",
     "PLTR": "PLTR", "帕蘭提爾": "PLTR",
     "COIN": "COIN", "微策略": "MSTR", "MSTR": "MSTR",
-    "QQQ": "QQQ", "SPY": "SPY", "SOXX": "SOXX", "NVDA": "NVDA"
+    "QQQ": "QQQ", "SPY": "SPY", "SOXX": "SOXX"
+}
+
+INDEX_KNOWN_MAP = {
+    "台股大盤": "^TWII", "加權指數": "^TWII", "TAIEX": "^TWII", "^TWII": "^TWII",
+    "櫃買指數": "^TWOII", "櫃買": "^TWOII", "OTC": "^TWOII", "^TWOII": "^TWOII",
+    "那斯達克": "^IXIC", "那指": "^IXIC", "NASDAQ": "^IXIC", "^IXIC": "^IXIC",
+    "標普500": "^GSPC", "S&P500": "^GSPC", "SPX": "^GSPC", "^GSPC": "^GSPC",
+    "費城半導體": "^SOX", "費半": "^SOX", "SOX": "^SOX", "^SOX": "^SOX",
+    "道瓊指數": "^DJI", "道瓊": "^DJI", "DJI": "^DJI", "^DJI": "^DJI",
+    "日經225": "^N225", "日經": "^N225", "^N225": "^N225"
 }
 
 @st.cache_data(ttl=86400, show_spinner=False)
@@ -119,46 +151,53 @@ def load_all_taiwan_stock_mapping():
             if code and name:
                 mapping[name] = code
                 mapping[code] = code
-                mapping[f"{code} {name}"] = code
     except Exception:
         pass
+    mapping.update(TW_KNOWN_MAP)
     return mapping
 
-def resolve_global_stock_code(query_text):
+def resolve_by_market(market_type, query_text):
     cleaned = query_text.strip().upper().replace(".TW", "").replace(".TWO", "")
     
-    # 1. 優先比對全球大盤或知名外股字典
-    if query_text.strip() in GLOBAL_KNOWN_MAP:
-        return GLOBAL_KNOWN_MAP[query_text.strip()], query_text.strip()
-    if cleaned in GLOBAL_KNOWN_MAP:
-        return GLOBAL_KNOWN_MAP[cleaned], query_text.strip()
-    for name, code in GLOBAL_KNOWN_MAP.items():
-        if name in query_text or query_text in name:
+    if "台灣" in market_type:
+        tw_map = load_all_taiwan_stock_mapping()
+        if cleaned in tw_map:
+            code = tw_map[cleaned]
+            name = query_text.strip()
+            for k, v in tw_map.items():
+                if v == code and not k.isdigit():
+                    name = k
+                    break
             return code, name
-            
-    # 2. 比對台股 2000+ 檔名冊
-    tw_map = load_all_taiwan_stock_mapping()
-    if cleaned in tw_map:
-        code = tw_map[cleaned]
-        name = query_text.strip()
         for k, v in tw_map.items():
-            if v == code and not k.isdigit():
-                name = k
-                break
-        return code, name
-    for k, v in tw_map.items():
-        if cleaned in k or k in cleaned:
-            return v, k
-            
-    # 3. 若為純數字則為台股代碼
-    if cleaned.isdigit():
-        return cleaned, f"台股 {cleaned}"
+            if cleaned in k or k in cleaned:
+                return v, k
+        if cleaned.isdigit():
+            return cleaned, f"台股 {cleaned}"
+        return cleaned, cleaned
         
-    # 4. 其餘直接作為美股/外股代號 (如: AAPL, BABA, 7203.T 等)
-    return cleaned, cleaned
+    elif "美國" in market_type:
+        if query_text.strip() in US_KNOWN_MAP:
+            return US_KNOWN_MAP[query_text.strip()], f"{query_text.strip()} (美股)"
+        if cleaned in US_KNOWN_MAP:
+            return US_KNOWN_MAP[cleaned], f"{cleaned} (美股)"
+        for name, code in US_KNOWN_MAP.items():
+            if name in query_text or query_text in name:
+                return code, f"{name} (美股)"
+        return cleaned, f"{cleaned} (美股)"
+        
+    else: # 指數大盤
+        if query_text.strip() in INDEX_KNOWN_MAP:
+            return INDEX_KNOWN_MAP[query_text.strip()], query_text.strip()
+        if cleaned in INDEX_KNOWN_MAP:
+            return INDEX_KNOWN_MAP[cleaned], query_text.strip()
+        for name, code in INDEX_KNOWN_MAP.items():
+            if name in query_text or query_text in name:
+                return code, name
+        return cleaned, cleaned
 
 # -----------------------------------------------------------------------------
-# 資料獲取模組 (支援台股 OpenAPI + 全球 yfinance 雙引擎)
+# 資料獲取模組
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=600, show_spinner=False)
 def fetch_twse_live_fundamentals(stock_id):
@@ -209,16 +248,16 @@ def get_tw_stock_kline(stock_id, days=240):
     return pd.DataFrame()
 
 @st.cache_data(ttl=300, show_spinner=False)
-def load_global_market_data(ticker_str, period_str):
-    raw_code, display_name = resolve_global_stock_code(ticker_str)
+def load_market_data_routed(market_type, ticker_str, period_str):
+    raw_code, display_name = resolve_by_market(market_type, ticker_str)
     days_map = {"3mo": 120, "6mo": 200, "1y": 380, "2y": 750}
     target_days = days_map.get(period_str, 200)
     
     df = pd.DataFrame()
     fund_info = {}
     
-    # 1. 若為純數字台股
-    if raw_code.isdigit():
+    # 台股模式優先走開源與 TWSE 接口
+    if "台灣" in market_type and raw_code.isdigit():
         df = get_tw_stock_kline(raw_code, days=target_days)
         fund_info = fetch_twse_live_fundamentals(raw_code)
         if not df.empty and fund_info.get("trailingPE"):
@@ -226,10 +265,10 @@ def load_global_market_data(ticker_str, period_str):
             fund_info["trailingEps"] = round(curr_p / fund_info["trailingPE"], 2)
         fund_info["longName"] = display_name
         
-    # 2. 若為美股/大盤指數/或台股備援
+    # 美股 / 指數 / 備援模式
     if df.empty or fund_info.get("trailingPE") is None:
         try:
-            yf_code = f"{raw_code}.TW" if raw_code.isdigit() else raw_code
+            yf_code = f"{raw_code}.TW" if ("台灣" in market_type and raw_code.isdigit()) else raw_code
             t = yf.Ticker(yf_code)
             if df.empty:
                 df = t.history(period=period_str)
@@ -246,7 +285,6 @@ def load_global_market_data(ticker_str, period_str):
             
     return df, fund_info, raw_code, display_name
 
-# 抓取全球主要大盤即時資訊
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_global_indices():
     indices = [
@@ -338,15 +376,25 @@ if market_indices:
 st.markdown("<hr style='border-color: #21262d; margin-top: 5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 側邊欄 (支援台股、美股、日股、ETF、大盤查詢)
+# 側邊欄 (新增市場分類下拉選單)
 # -----------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("### 🔍 全球股票 / 大盤搜尋")
+    st.markdown("### 🔍 智慧股票終端")
+    
+    market_select = st.selectbox(
+        "選擇市場別",
+        options=["🇹🇼 台灣股市 (上市 / 櫃 / ETF)", "🇺🇸 美國股市 (美股 / ADR / ETF)", "🌐 全球大盤指數 (加權 / 那指 / 標普)"],
+        index=0
+    )
+    
+    # 依市場別給予合適的預設搜尋範例
+    default_ph = "例如: 台積電、鴻海、2330、0050" if "台灣" in market_select else "例如: NVDA、TSLA、AAPL、台積電" if "美國" in market_select else "例如: 加權指數、那斯達克、標普500"
+    default_val = "台積電" if "台灣" in market_select else "NVDA" if "美國" in market_select else "加權指數"
+    
     search_query = st.text_input(
-        "股票名稱 / 代碼 / 指數",
-        value="台積電",
-        placeholder="例如: 台積電、NVDA、AAPL、加權指數",
-        help="支援全台股 (如: 台新金, 2330)、美股 (如: NVDA, TSLA, AAPL)、ETF (0050, QQQ) 或 大盤 (加權指數, 那斯達克)"
+        "輸入股票名稱或代碼",
+        value=default_val,
+        placeholder=default_ph
     ).strip()
     
     period_option = st.selectbox(
@@ -355,20 +403,21 @@ with st.sidebar:
         index=1,
         format_func=lambda x: {"3mo": "近 3 個月", "6mo": "近 6 個月", "1y": "近 1 年", "2y": "近 2 年"}.get(x, x)
     )
+    
     st.markdown("---")
-    st.caption("🌍 **全球市場已連線**：支援台股 2000+ 檔、美股全市場、美股七巨頭與全球大盤指數！")
+    st.caption("🧭 **已切換專屬市場引擎**：台股精準對應 2330，美股對應美股代碼！")
     btn_refresh = st.button("🚀 重新載入", use_container_width=True)
 
 # -----------------------------------------------------------------------------
 # 主畫面呈現
 # -----------------------------------------------------------------------------
 if search_query:
-    with st.spinner(f"正在連線全球市場終端，載入「{search_query}」..."):
-        df, info, clean_code, display_name = load_global_market_data(search_query, period_option)
+    with st.spinner(f"正在載入「{search_query}」行情與決策診斷..."):
+        df, info, clean_code, display_name = load_market_data_routed(market_select, search_query, period_option)
         
         if df is None or df.empty or len(df) < 5:
             st.error(f"❌ 查無「{search_query}」的價格資訊。")
-            st.info("💡 請確認名稱或代號是否正確（例如輸入 `台新金`、`NVDA`、`AAPL` 或 `加權指數`）。")
+            st.info("💡 請確認代碼或名稱是否屬於所選市場（例如在台股搜尋 `2330` 或 `台積電`；美股搜尋 `NVDA` 或 `TSM`）。")
         else:
             df = compute_all_indicators(df)
             latest = df.iloc[-1]
